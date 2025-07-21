@@ -3,3 +3,56 @@
 *{
     font-family: Roboto , sans-serif , Arial, Helvetica, sans-serif;
 }
+/* Add this to your global CSS file (e.g., index.css or App.css) */
+
+/* Mobile viewport fixes for keyboard */
+@supports (height: 100dvh) {
+    .h-dvh {
+        height: 100dvh !important;
+    }
+}
+
+/* Fallback for browsers that don't support dvh */
+@supports not (height: 100dvh) {
+    .h-dvh {
+        height: 100vh;
+    }
+}
+
+/* Prevent zoom on iOS when focusing inputs */
+input,
+textarea,
+select {
+    font-size: 16px !important;
+}
+
+/* Mobile-specific fixes */
+@media screen and (max-width: 768px) {
+
+    /* Prevent body scroll when keyboard is open */
+    body.keyboard-open {
+        position: fixed;
+        width: 100%;
+    }
+
+    /* Smooth scrolling for mobile */
+    .overflow-y-auto {
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
+    }
+
+    /* Better touch targets */
+    button,
+    input,
+    [role="button"] {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
+
+/* Visual viewport API support for modern browsers */
+@supports (height: 100svh) {
+    .chat-container {
+        height: 100svh;
+    }
+}

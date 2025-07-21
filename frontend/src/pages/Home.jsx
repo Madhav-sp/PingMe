@@ -1,5 +1,4 @@
 // src/pages/Home.jsx
-
 import React, { useState } from "react";
 import ChatHeader from "./ChatHeader";
 import ChatBox from "./ChatBox";
@@ -13,7 +12,7 @@ const Home = () => {
   const [showSidebar, setShowSidebar] = useState(false);
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-[#0D0D0D]">
+    <div className="h-dvh w-screen flex overflow-hidden bg-[#0D0D0D] supports-[height:100dvh]:h-dvh">
       {/* Mobile Sidebar Overlay */}
       {showSidebar && (
         <div
@@ -51,8 +50,10 @@ const Home = () => {
         {selectedUser ? (
           <>
             <ChatHeader />
-            <ChatBox />
-            <MessageInput />
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <ChatBox />
+              <MessageInput />
+            </div>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-white text-xl">

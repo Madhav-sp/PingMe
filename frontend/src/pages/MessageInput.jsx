@@ -1,4 +1,3 @@
-// MessageInput.jsx
 import { useState, useEffect } from "react";
 import socket from "../socket";
 import { useSelector } from "react-redux";
@@ -38,7 +37,7 @@ const MessageInput = () => {
   };
 
   return (
-    <div className="flex items-center px-4 py-3 border-t border-[#1E1E1E] bg-[#111] flex-shrink-0">
+    <div className="flex items-center px-4 py-3 border-t border-[#1E1E1E] bg-[#111] flex-shrink-0 sticky bottom-0">
       <input
         type="text"
         value={message}
@@ -46,9 +45,13 @@ const MessageInput = () => {
         placeholder="Type your message..."
         className="flex-1 bg-[#1E1E1E] px-4 py-2 rounded-full text-white placeholder-gray-400 outline-none border border-[#333] focus:border-blue-500"
         onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+        autoComplete="off"
+        autoCapitalize="sentences"
+        autoCorrect="on"
+        spellCheck="true"
       />
       <button
-        className="ml-3 bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-colors duration-200"
+        className="ml-3 bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-colors duration-200 flex-shrink-0"
         onClick={sendMessage}
       >
         Send
