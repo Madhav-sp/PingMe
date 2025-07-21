@@ -1,7 +1,7 @@
 // src/socket.js
 import { io } from "socket.io-client";
 
-const socket = io("http://localhost:3000", {
+const socket = io("https://pingme-backend-vl8g.onrender.com", {
   withCredentials: true,
 });
 

@@ -3,7 +3,7 @@
 import axios from "axios";
 
 export const axiosinstance = axios.create({
-  baseURL: "http://localhost:3000/api/v1", 
+  baseURL: "https://pingme-backend-vl8g.onrender.com/api/v1", 
   headers: {
     "Content-Type": "application/json",
   },
