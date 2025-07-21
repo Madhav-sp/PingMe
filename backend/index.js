@@ -15,7 +15,7 @@ await connectdb();
 app.use(express.json());
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "https://pingme-gwv5.onrender.com",
     credentials: true,
   })
 );
@@ -26,7 +26,7 @@ app.use("/api/v1", messagerouter);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: "https://pingme-gwv5.onrender.com",
     methods: ["GET", "POST"],
     credentials: true,
   },
