@@ -49,7 +49,10 @@ const Home = () => {
       <div className="flex-1 flex flex-col min-w-0 h-full">
         {selectedUser ? (
           <>
-            <ChatHeader />
+            {/* Fixed Header - Always visible */}
+            <div className="flex-shrink-0 sticky top-0 z-10">
+              <ChatHeader />
+            </div>
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <ChatBox />
               <MessageInput />

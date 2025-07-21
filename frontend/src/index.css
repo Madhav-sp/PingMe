@@ -48,11 +48,43 @@ select {
         min-height: 44px;
         min-width: 44px;
     }
+
+    /* Ensure sticky elements stay visible */
+    .sticky {
+        position: -webkit-sticky !important;
+        position: sticky !important;
+    }
+
+    /* Keep header visible when keyboard opens */
+    .sticky.top-0 {
+        top: 0 !important;
+        background: inherit;
+        backdrop-filter: blur(10px);
+    }
+
+    /* Keep input at bottom when keyboard opens */
+    .sticky.bottom-0 {
+        bottom: 0 !important;
+    }
 }
 
 /* Visual viewport API support for modern browsers */
 @supports (height: 100svh) {
     .chat-container {
         height: 100svh;
+    }
+}
+
+/* iOS Safari specific fixes */
+@supports (-webkit-touch-callout: none) {
+
+    /* iOS Safari */
+    .h-dvh {
+        height: -webkit-fill-available;
+    }
+
+    /* Prevent viewport jumping */
+    input:focus {
+        transform: translateZ(0);
     }
 }
