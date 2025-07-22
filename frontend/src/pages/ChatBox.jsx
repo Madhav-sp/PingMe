@@ -58,6 +58,19 @@ const ChatBox = () => {
     };
   }, [currentUser?._id, selectedUser?._id, dispatch]);
 
+  // Generate a unique key for each message
+  const generateMessageKey = (msg, index) => {
+    // Option 1: If your messages have unique _id from database
+    if (msg._id) {
+      return msg._id;
+    }
+
+    // Option 2: If no _id, create composite key
+    return `${msg.sender}-${msg.receiver}-${
+      msg.time
+    }-${index}-${msg.text?.substring(0, 20)}`;
+  };
+
   return (
     <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col gap-4 text-white bg-[#0D0D0D] min-h-0">
       {messages.map((msg, idx) => {
@@ -65,7 +78,7 @@ const ChatBox = () => {
 
         return (
           <div
-            key={idx}
+            key={generateMessageKey(msg, idx)} // ✅ Fixed: Using unique key instead of index
             className={`max-w-md ${
               isMe ? "self-end text-right" : "self-start text-left"
             }`}
