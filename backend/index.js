@@ -43,17 +43,26 @@ io.on("connection", (socket) => {
   socket.on("sendMessage", async (data) => {
     const { sender, receiver, text, time } = data;
 
-    const message = await Message.create({ sender, receiver, text, time });
+    try {
+      const message = await Message.create({ sender, receiver, text, time });
 
-    io.to(receiver).emit("receiveMessage", {
-      ...message._doc,
-      senderName: "Other",
-    });
+      // ✅ FIX: Send the same message data to both users
+      const messageData = {
+        ...message._doc,
+      };
 
-    io.to(sender).emit("receiveMessage", {
-      ...message._doc,
-      senderName: "You",
-    });
+      // Send to receiver's room
+      io.to(receiver).emit("receiveMessage", messageData);
+
+      // Send to sender's room (so they see their own message)
+      io.to(sender).emit("receiveMessage", messageData);
+
+      console.log(`Message sent from ${sender} to ${receiver}`);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      // Optionally emit error back to sender
+      socket.emit("messageError", { error: "Failed to send message" });
+    }
   });
 
   socket.on("disconnect", () => {
