@@ -24,7 +24,6 @@ const Login = () => {
         };
         const newuser = await axiosinstance.post("/user/login", userData);
         dispatch(setUser(newuser.data.user));
-        console.log(newuser.data.user);
         navigate("/");
                 
     } catch (error) {
