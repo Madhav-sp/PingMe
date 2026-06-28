@@ -35,6 +35,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Conversation invalid" }, { status: 400 });
   }
 
+  // Check conversation disappearing mode
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+  });
+
+  let expiresAt: Date | null = null;
+  if (conversation?.disappearingMode && conversation.disappearingMode !== "off") {
+    const now = new Date();
+    if (conversation.disappearingMode === "24h") expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    else if (conversation.disappearingMode === "7d") expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    else if (conversation.disappearingMode === "30d") expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  }
+
   // Encrypt message content
   const { ciphertext, iv } = encrypt(content, conversationId);
 
@@ -51,6 +64,7 @@ export async function POST(req: NextRequest) {
       fileName,
       fileSize,
       status: "SENT",
+      expiresAt,
     },
     include: {
       sender: {
@@ -82,10 +96,24 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Increment unread count for receiver
+  // Check receiver preference for auto-unarchive
+  const receiverUser = await prisma.user.findUnique({
+    where: { id: otherParticipant.userId },
+    select: { keepArchived: true },
+  });
+
+  const updateParticipantData: { unreadCount: { increment: number }; isArchived?: boolean } = {
+    unreadCount: { increment: 1 },
+  };
+
+  if (!receiverUser?.keepArchived) {
+    updateParticipantData.isArchived = false;
+  }
+
+  // Increment unread count for receiver and conditionally unarchive
   await prisma.conversationParticipant.updateMany({
     where: { conversationId, userId: otherParticipant.userId },
-    data: { unreadCount: { increment: 1 } },
+    data: updateParticipantData,
   });
 
   // Return decrypted message to client

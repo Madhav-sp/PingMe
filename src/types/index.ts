@@ -1,4 +1,4 @@
-export type MessageType = "TEXT" | "IMAGE" | "FILE" | "VOICE" | "GIF";
+export type MessageType = "TEXT" | "IMAGE" | "VIDEO" | "FILE" | "VOICE" | "AUDIO" | "GIF";
 export type MessageStatus = "SENT" | "DELIVERED" | "READ";
 export type RequestStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 export type NotificationType =
@@ -17,6 +17,7 @@ export interface User {
   bio: string | null;
   lastSeen: string;
   isOnline: boolean;
+  keepArchived?: boolean;
   createdAt: string;
 }
 
@@ -35,6 +36,8 @@ export interface Message {
   status: MessageStatus;
   isEdited: boolean;
   deletedForAll: boolean;
+  deletedForIds?: string[];
+  expiresAt?: string | null;
   reactions: Reaction[];
   createdAt: string;
   updatedAt: string;
@@ -58,6 +61,8 @@ export interface Conversation {
   updatedAt: string;
   participant: User;
   unreadCount: number;
+  isArchived?: boolean;
+  disappearingMode?: string;
 }
 
 export interface ChatRequest {

@@ -34,7 +34,7 @@ export async function GET(
       cursor: { id: cursor },
       skip: 1,
     }),
-    take: limit + 10, // Fetch extra buffer in case some are filtered out
+    take: limit + 15, // Fetch extra buffer in case some are filtered out
     orderBy: { createdAt: "desc" },
     include: {
       sender: {
@@ -61,11 +61,24 @@ export async function GET(
     },
   });
 
-  // Filter out deleted messages safely in JS
+  const now = new Date();
+
+  // Asynchronously clean up expired messages in background
+  const expiredIds = rawMessages
+    .filter((msg) => msg.expiresAt && msg.expiresAt <= now)
+    .map((msg) => msg.id);
+
+  if (expiredIds.length > 0) {
+    prisma.message.deleteMany({ where: { id: { in: expiredIds } } }).catch(console.error);
+  }
+
+  // Filter out deleted, cleared, or expired messages safely in JS
   const validMessages = rawMessages.filter(
     (msg) =>
       (!msg.deletedForAll || msg.senderId === userId) &&
-      !(msg.deletedForIds || []).includes(userId)
+      !(msg.deletedForIds || []).includes(userId) &&
+      (!msg.expiresAt || msg.expiresAt > now) &&
+      (!participant.clearedHistoryAt || msg.createdAt > participant.clearedHistoryAt)
   );
 
   const hasMore = validMessages.length > limit;

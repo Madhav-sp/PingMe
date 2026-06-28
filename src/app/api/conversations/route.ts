@@ -43,6 +43,8 @@ export async function GET() {
               senderId: true,
               createdAt: true,
               conversationId: true,
+              deletedForIds: true,
+              expiresAt: true,
             },
           },
         },
@@ -53,12 +55,31 @@ export async function GET() {
     },
   });
 
-  const conversations = participations.map((p) => {
+  const now = new Date();
+
+  const activeParticipations = participations.filter((p) => {
+    // Hide conversation if user cleared history and no new message arrived after clearing
+    if (p.clearedHistoryAt) {
+      if (!p.conversation.lastMessageAt || p.clearedHistoryAt >= p.conversation.lastMessageAt) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const conversations = activeParticipations.map((p) => {
     const otherParticipant = p.conversation.participants[0];
     const lastMsg = p.conversation.messages[0];
     let lastMessagePreview = p.conversation.lastMessage;
 
-    if (lastMsg && lastMsg.contentIv) {
+    // Check if last message was deleted for this user or expired
+    const isLastMsgDeletedOrExpired =
+      lastMsg &&
+      (lastMsg.deletedForIds?.includes(userId) || (lastMsg.expiresAt && lastMsg.expiresAt <= now));
+
+    if (isLastMsgDeletedOrExpired) {
+      lastMessagePreview = "";
+    } else if (lastMsg && lastMsg.contentIv) {
       try {
         const decrypted = decrypt(lastMsg.content, lastMsg.contentIv, lastMsg.conversationId);
         lastMessagePreview = decrypted.length > 50 ? decrypted.slice(0, 50) + "..." : decrypted;
@@ -67,11 +88,12 @@ export async function GET() {
       }
     }
 
-    if (lastMsg?.type !== "TEXT") {
+    if (!isLastMsgDeletedOrExpired && lastMsg?.type !== "TEXT") {
       const typeLabels: Record<string, string> = {
         IMAGE: "📷 Photo",
         FILE: "📎 File",
         VOICE: "🎤 Voice message",
+        AUDIO: "🎤 Voice message",
         GIF: "GIF",
       };
       lastMessagePreview = typeLabels[lastMsg?.type || "TEXT"] || lastMessagePreview;
@@ -85,6 +107,8 @@ export async function GET() {
       updatedAt: p.conversation.updatedAt,
       participant: otherParticipant?.user || null,
       unreadCount: p.unreadCount,
+      isArchived: p.isArchived,
+      disappearingMode: p.conversation.disappearingMode,
     };
   });
 

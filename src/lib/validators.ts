@@ -34,9 +34,9 @@ export const signupSchema = z.object({
 export const messageSchema = z.object({
   content: z.string().min(1).max(5000),
   conversationId: z.string(),
-  type: z.enum(["TEXT", "IMAGE", "FILE", "VOICE", "GIF"]).default("TEXT"),
+  type: z.enum(["TEXT", "IMAGE", "FILE", "VOICE", "AUDIO", "GIF"]).default("TEXT"),
   replyToId: z.string().optional(),
-  fileUrl: z.string().url().optional(),
+  fileUrl: z.string().optional(),
   fileName: z.string().optional(),
   fileSize: z.number().optional(),
 });
