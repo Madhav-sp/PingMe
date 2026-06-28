@@ -1,0 +1,185 @@
+// This is your Prisma schema file for MongoDB
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  email          String    @unique
+  username       String    @unique
+  displayName    String
+  hashedPassword String?
+  image          String?
+  bio            String?
+  lastSeen       DateTime  @default(now())
+  isOnline       Boolean   @default(false)
+  emailVerified  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  accounts               Account[]
+  sessions               Session[]
+  sentMessages           Message[]                  @relation("SentMessages")
+  receivedMessages       Message[]                  @relation("ReceivedMessages")
+  sentRequests           ChatRequest[]              @relation("SentRequests")
+  receivedRequests       ChatRequest[]              @relation("ReceivedRequests")
+  conversations          ConversationParticipant[]
+  notifications          Notification[]
+  blockedUsers           BlockedUser[]              @relation("Blocker")
+  blockedBy              BlockedUser[]              @relation("Blocked")
+  reactions              Reaction[]
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Conversation {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  lastMessage   String?
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String   @db.ObjectId
+  conversationId String   @db.ObjectId
+  unreadCount    Int      @default(0)
+  lastReadAt     DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationId])
+  @@index([userId])
+}
+
+model Message {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String        @db.ObjectId
+  senderId       String        @db.ObjectId
+  receiverId     String        @db.ObjectId
+  content        String
+  contentIv      String?
+  type           String        @default("TEXT")
+  fileUrl        String?
+  fileName       String?
+  fileSize       Int?
+  replyToId      String?       @db.ObjectId
+  status         String        @default("SENT")
+  isEdited       Boolean       @default(false)
+  deletedForIds  String[]      @db.ObjectId
+  deletedForAll  Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id])
+  receiver     User         @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  replyTo      Message?     @relation("Replies", fields: [replyToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies      Message[]    @relation("Replies")
+  reactions    Reaction[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model Reaction {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  messageId String @db.ObjectId
+  userId    String @db.ObjectId
+  emoji     String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId, emoji])
+}
+
+model ChatRequest {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  senderId   String   @db.ObjectId
+  receiverId String   @db.ObjectId
+  status     String   @default("PENDING")
+  message    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sender   User @relation("SentRequests", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+}
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  type      String
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model BlockedUser {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  blockerId String @db.ObjectId
+  blockedId String @db.ObjectId
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id])
+  blocked User @relation("Blocked", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
+}
