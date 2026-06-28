@@ -17,7 +17,7 @@ export function initSocketServer(server: SocketServer): SocketIOServer {
     path: "/api/socket/io",
     addTrailingSlash: false,
     cors: {
-      origin: process.env.NEXTAUTH_URL || "http://localhost:3000",
+      origin: process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || true,
       methods: ["GET", "POST"],
       credentials: true,
     },

@@ -51,9 +51,19 @@ export function SocketProvider({ children }: SocketProviderProps) {
       return;
     }
 
-    const socketInstance = io(
-      process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin,
-      {
+    const getSocketUrl = () => {
+      if (typeof window !== "undefined") {
+        if (process.env.NODE_ENV === "production") {
+          return process.env.NEXT_PUBLIC_SOCKET_URL && !process.env.NEXT_PUBLIC_SOCKET_URL.includes("localhost")
+            ? process.env.NEXT_PUBLIC_SOCKET_URL
+            : window.location.origin;
+        }
+        return process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin;
+      }
+      return process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+    };
+
+    const socketInstance = io(getSocketUrl(), {
         path: "/api/socket/io",
         transports: ["websocket", "polling"],
         auth: {
