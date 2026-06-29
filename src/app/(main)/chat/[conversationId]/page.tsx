@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState, use } from "react";
+import { useEffect, useRef, useCallback, useState, use, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,6 +39,7 @@ import { cn, formatTime, getInitials } from "@/lib/utils";
 import { toast } from "sonner";
 import { useSessionRestore } from "@/hooks/useSessionRestore";
 import { triggerHaptic } from "@/lib/haptics";
+import { useKeyboardHandler } from "@/hooks/useKeyboardHandler";
 
 export default function ChatViewPage({
   params,
@@ -64,6 +65,8 @@ export default function ChatViewPage({
   } = useChatStore();
   const { startCall } = useCallStore();
   const { saveDraft, getDraft } = useSessionRestore();
+  const { keyboardHeight, isKeyboardOpen } = useKeyboardHandler();
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const [messageInput, setMessageInput] = useState("");
 
@@ -321,6 +324,15 @@ export default function ChatViewPage({
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [allMessages.length, showScrollButton]);
+
+  // When keyboard opens, scroll to keep newest messages visible
+  useEffect(() => {
+    if (isKeyboardOpen && messagesContainerRef.current) {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      });
+    }
+  }, [isKeyboardOpen, keyboardHeight]);
 
   // Scroll detection
   const handleScroll = () => {
@@ -831,10 +843,17 @@ export default function ChatViewPage({
     setIsViewerOpen(true);
   };
 
+  // Dynamic style for the composer when keyboard is open
+  const composerStyle = useMemo(() => ({
+    paddingBottom: isKeyboardOpen
+      ? `${Math.max(keyboardHeight, 0)}px`
+      : undefined,
+  }), [isKeyboardOpen, keyboardHeight]);
+
   return (
-    <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] min-h-0 relative overflow-hidden bg-background">
+    <div ref={chatContainerRef} className="chat-layout flex-1 bg-background">
       {/* Notion/Claude Inspired Top Navigation Bar */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-card/90 backdrop-blur-md flex-shrink-0 relative z-20">
+      <div className="chat-header flex items-center justify-between px-6 py-3 border-b border-border bg-card/90 backdrop-blur-md">
         <div className="flex items-center gap-3">
           {isMobileView && (
             <button
@@ -1034,7 +1053,8 @@ export default function ChatViewPage({
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-1 min-h-0"
+        data-scrollable
+        className="chat-messages native-scroll px-4 py-4 space-y-1"
       >
         {isFetchingNextPage && (
           <div className="flex justify-center py-3">
@@ -1275,7 +1295,7 @@ export default function ChatViewPage({
             onClick={() =>
               messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
             }
-            className="absolute bottom-28 right-6 p-2.5 rounded-full bg-card border border-border shadow-lg hover:bg-accent transition-colors z-10"
+            className="absolute bottom-28 right-6 p-2.5 rounded-full bg-card border border-border shadow-lg hover:bg-accent transition-colors z-10 !min-h-0 !min-w-0"
           >
             <ArrowDown className="w-4 h-4" />
           </motion.button>
@@ -1311,7 +1331,7 @@ export default function ChatViewPage({
       </AnimatePresence>
 
       {/* Message Input */}
-      <div className="px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-border bg-card/80 backdrop-blur-xl flex-shrink-0">
+      <div className="chat-composer px-4 py-3 border-t border-border bg-card/80 backdrop-blur-xl" style={composerStyle}>
         {isBlocked ? (
           <div className="flex items-center justify-between w-full bg-destructive/10 text-destructive px-4 py-3 rounded-xl font-medium text-sm">
             <span>You blocked this contact. Unblock to send messages.</span>

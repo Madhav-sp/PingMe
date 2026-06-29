@@ -504,7 +504,7 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 native-scroll" data-scrollable>
         {!showSearch && conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
