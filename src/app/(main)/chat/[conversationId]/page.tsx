@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  ArrowLeft,
   ArrowDown,
   Phone,
   Video,
@@ -53,6 +54,7 @@ export default function ChatViewPage({
   const { emit, on, off, isConnected } = useSocket();
   const {
     selectedUser,
+    setSelectedConversation,
     replyingTo,
     setReplyingTo,
     isMobileView,
@@ -67,6 +69,11 @@ export default function ChatViewPage({
   const { saveDraft, getDraft } = useSessionRestore();
   const { viewportHeight, isKeyboardOpen } = useKeyboardHandler();
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isInitialMountRef = useRef(true);
+
+  useEffect(() => {
+    isInitialMountRef.current = true;
+  }, [conversationId]);
 
   const [messageInput, setMessageInput] = useState("");
 
@@ -321,7 +328,11 @@ export default function ChatViewPage({
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (!showScrollButton) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const behavior = isInitialMountRef.current ? "instant" : "smooth";
+      messagesEndRef.current?.scrollIntoView({ behavior });
+      if (allMessages.length > 0) {
+        isInitialMountRef.current = false;
+      }
     }
   }, [allMessages.length, showScrollButton]);
 
@@ -527,6 +538,9 @@ export default function ChatViewPage({
 
     setMessageInput("");
     saveDraft(conversationId, "");
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+    }
     triggerHaptic("light");
     try {
       const count = parseInt(localStorage.getItem("pingme_msg_count") || "0", 10) + 1;
@@ -694,6 +708,10 @@ export default function ChatViewPage({
   const handleInputChange = (value: string) => {
     setMessageInput(value);
     saveDraft(conversationId, value);
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`;
+    }
     emit("typing", { conversationId, isTyping: true });
     fetch(`/api/conversations/${conversationId}/typing`, {
       method: "POST",
@@ -853,50 +871,59 @@ export default function ChatViewPage({
 
   return (
     <div ref={chatContainerRef} className="chat-layout flex-1 bg-background" style={containerStyle}>
-      {/* Notion/Claude Inspired Top Navigation Bar */}
-      <div className="chat-header flex items-center justify-between px-6 py-3 border-b border-border bg-card/90 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          {isMobileView && (
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-          )}
-          <div className="relative">
+      {/* Premium Native Messaging Header */}
+      <div className="chat-header flex items-center justify-between px-3.5 py-2 border-b border-border/80 bg-card/95 backdrop-blur-xl shadow-sm">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <button
+            onClick={() => {
+              setSelectedConversation(null);
+              if (isMobileView) setIsSidebarOpen(true);
+              router.push("/chat");
+            }}
+            className="p-1.5 -ml-1 rounded-full hover:bg-accent transition-colors text-foreground flex items-center justify-center flex-shrink-0"
+            title="Back to conversations"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+
+          <div className="relative flex-shrink-0 cursor-pointer" onClick={() => router.push(`/profile/${selectedUser?.username || ""}`)}>
             {selectedUser?.image ? (
               <img
                 src={selectedUser.image}
                 alt={selectedUser.displayName}
-                className="w-9 h-9 rounded-full object-cover border border-border"
+                className="w-10 h-10 rounded-full object-cover border border-border/60 shadow-inner"
               />
             ) : (
-              <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-foreground">
+              <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold text-primary">
                 {selectedUser ? getInitials(selectedUser.displayName) : "?"}
               </div>
             )}
             {selectedUser?.isOnline && (
-              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-online rounded-full border-2 border-card" />
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-card shadow-sm" />
             )}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm leading-tight text-foreground">
+
+          <div className="min-w-0 flex-1 cursor-pointer" onClick={() => router.push(`/profile/${selectedUser?.username || ""}`)}>
+            <div className="flex items-center gap-1.5">
+              <h3 className="font-semibold text-sm leading-snug text-foreground truncate">
                 {selectedUser?.displayName || "Chat"}
               </h3>
               {isArchived && (
-                <span className="px-1.5 py-0.5 text-[10px] bg-secondary text-muted-foreground rounded font-medium flex items-center gap-1">
-                  <Archive className="w-3 h-3" /> Archived
+                <span className="px-1.5 py-0.5 text-[9px] bg-secondary text-muted-foreground rounded font-semibold flex items-center gap-1 flex-shrink-0">
+                  <Archive className="w-2.5 h-2.5" /> Archived
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              {typingUsers.length > 0
-                ? "typing..."
-                : selectedUser?.isOnline
-                ? "Online"
-                : `Last seen ${selectedUser?.lastSeen ? formatTime(selectedUser.lastSeen) : "recently"}`}
+            <p className="text-[11px] leading-tight truncate">
+              {typingUsers.length > 0 ? (
+                <span className="text-primary font-medium animate-pulse">typing...</span>
+              ) : selectedUser?.isOnline ? (
+                <span className="text-emerald-500 font-medium">Online</span>
+              ) : (
+                <span className="text-muted-foreground">
+                  {selectedUser?.lastSeen ? `Last seen ${formatTime(selectedUser.lastSeen)}` : "Offline"}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -1332,7 +1359,10 @@ export default function ChatViewPage({
       </AnimatePresence>
 
       {/* Message Input */}
-      <div className="chat-composer px-4 py-3 border-t border-border bg-card/80 backdrop-blur-xl">
+      <div
+        className="chat-composer px-3.5 py-2.5 border-t border-border/80 bg-card/95 backdrop-blur-xl transition-all"
+        style={{ paddingBottom: isKeyboardOpen ? "0.5rem" : "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
+      >
         {isBlocked ? (
           <div className="flex items-center justify-between w-full bg-destructive/10 text-destructive px-4 py-3 rounded-xl font-medium text-sm">
             <span>You blocked this contact. Unblock to send messages.</span>

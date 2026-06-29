@@ -308,7 +308,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* JS sets height via style prop; this is the fallback */
+  height: 100dvh;
   height: 100%;
 }
 
@@ -328,7 +328,6 @@ body {
 .chat-composer {
   flex-shrink: 0;
   z-index: 20;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Safe area helpers */
