@@ -274,26 +274,17 @@ html.theme-transition *::after {
 }
 
 /* PWA & Mobile Native Optimizations */
-html, body {
-  overscroll-behavior: none;
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-  touch-action: manipulation;
-  /* Prevent body from scrolling — only inner containers scroll */
+html {
   overflow: hidden;
-  position: fixed;
-  width: 100%;
   height: 100%;
-  height: 100dvh;
 }
 
-/* Prevent iOS rubber-banding and pull-to-refresh on the root */
-#__next {
+body {
   overflow: hidden;
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100dvh;
+  height: 100%;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 @media (max-width: 768px) {
@@ -303,33 +294,31 @@ html, body {
   }
 }
 
-/* Native momentum scrolling for message containers */
+/* Native momentum scrolling for scrollable containers */
 .native-scroll {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  scroll-behavior: smooth;
 }
 
-/* Chat layout: fixed header + flexible messages + fixed composer */
+/* Chat layout: Header → Messages → Composer
+ * Height is controlled by JS via useKeyboardHandler (visualViewport.height).
+ * When no JS height is set, falls back to 100% of parent.
+ */
 .chat-layout {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  height: 100%;
-  max-height: 100dvh;
   overflow: hidden;
-  position: relative;
+  /* JS sets height via style prop; this is the fallback */
+  height: 100%;
 }
 
 .chat-header {
   flex-shrink: 0;
-  position: sticky;
-  top: 0;
   z-index: 20;
 }
 
 .chat-messages {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -338,32 +327,16 @@ html, body {
 
 .chat-composer {
   flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
   z-index: 20;
-  /* Will be adjusted via JS when keyboard is open */
-  transition: padding-bottom 0.1s ease;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Safe area padding for notch and home indicator devices */
+/* Safe area helpers */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
-}
-
-/* Touch target minimum sizes (WCAG 2.5.5 Level AAA) */
-@media (pointer: coarse) {
-  button, [role="button"], a {
-    min-height: 44px;
-    min-width: 44px;
-  }
-  /* Exclude tiny inline elements in message bubbles */
-  .msg-bubble button, .msg-bubble [role="button"] {
-    min-height: unset;
-    min-width: unset;
-  }
 }
 
 /* Standalone PWA detection: hide install UI */
@@ -372,4 +345,5 @@ html, body {
     display: none !important;
   }
 }
+
 

@@ -3,80 +3,78 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 /**
- * useKeyboardHandler - A hook that uses the Visual Viewport API to detect
- * the mobile keyboard and dynamically adjust the chat layout so that:
- * - The header stays fixed at top
- * - The composer stays fixed directly above the keyboard
- * - Only the message container resizes
- * - No viewport jumping, no white gaps, no layout shift
+ * useKeyboardHandler
+ * 
+ * Controls the chat container height using window.visualViewport.height.
+ * 
+ * Strategy:
+ * - Returns `viewportHeight` which is always `visualViewport.height`
+ * - The chat container sets its height to this value directly
+ * - When the keyboard opens, visualViewport.height shrinks → container shrinks
+ * - The flex layout (header + messages + composer) naturally adjusts
+ * - No padding tricks, no double-adjustment, no gaps
+ * 
+ * Works on:
+ * - iOS Safari (where layout viewport does NOT resize with keyboard)
+ * - Android Chrome (where layout viewport DOES resize)
+ * - Samsung Internet, Edge, installed PWAs
  */
 export function useKeyboardHandler() {
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-  const previousViewportHeight = useRef<number>(0);
-  const stableOuterHeight = useRef<number>(0);
-  const rafRef = useRef<number>(0);
+  const initialHeight = useRef<number>(0);
+  const rafId = useRef<number>(0);
 
-  const handleViewportResize = useCallback(() => {
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-    }
+  const update = useCallback(() => {
+    if (rafId.current) cancelAnimationFrame(rafId.current);
 
-    rafRef.current = requestAnimationFrame(() => {
+    rafId.current = requestAnimationFrame(() => {
       const vv = window.visualViewport;
       if (!vv) return;
 
-      // Use the stable outer height captured on first load
-      // vs the visual viewport height to determine keyboard presence
-      const currentViewportHeight = vv.height;
-      const fullHeight = stableOuterHeight.current || window.innerHeight;
-      const diff = fullHeight - currentViewportHeight;
+      const h = Math.round(vv.height);
+      setViewportHeight(h);
 
-      // Consider keyboard open if diff > 100px (accounts for browser chrome)
-      const kbOpen = diff > 100;
-      const kbHeight = kbOpen ? diff : 0;
-
-      setKeyboardHeight(kbHeight);
-      setIsKeyboardOpen(kbOpen);
-
-      previousViewportHeight.current = currentViewportHeight;
+      // Keyboard is open if viewport shrank by more than 150px
+      // (accounts for mobile browser chrome changes)
+      const diff = initialHeight.current - h;
+      setIsKeyboardOpen(diff > 150);
     });
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Capture stable height on mount (before any keyboard)
-    stableOuterHeight.current = window.innerHeight;
-    previousViewportHeight.current = window.innerHeight;
-
     const vv = window.visualViewport;
-    if (vv) {
-      vv.addEventListener('resize', handleViewportResize);
-      vv.addEventListener('scroll', handleViewportResize);
+    if (!vv) {
+      // Fallback for browsers without Visual Viewport API
+      setTimeout(() => setViewportHeight(window.innerHeight), 0);
+      return;
     }
 
-    // Also track orientation changes to reset stable height
-    const handleOrientationChange = () => {
-      setTimeout(() => {
-        stableOuterHeight.current = window.innerHeight;
-        handleViewportResize();
-      }, 300);
-    };
+    // Capture the initial height (no keyboard)
+    initialHeight.current = Math.round(vv.height);
+    setTimeout(() => setViewportHeight(initialHeight.current), 0);
 
-    window.addEventListener('orientationchange', handleOrientationChange);
+    vv.addEventListener('resize', update);
+
+    // Reset initial height on orientation change
+    const onOrientation = () => {
+      setTimeout(() => {
+        if (vv) {
+          initialHeight.current = Math.round(vv.height);
+          update();
+        }
+      }, 500);
+    };
+    window.addEventListener('orientationchange', onOrientation);
 
     return () => {
-      if (vv) {
-        vv.removeEventListener('resize', handleViewportResize);
-        vv.removeEventListener('scroll', handleViewportResize);
-      }
-      window.removeEventListener('orientationchange', handleOrientationChange);
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
+      vv.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', onOrientation);
+      if (rafId.current) cancelAnimationFrame(rafId.current);
     };
-  }, [handleViewportResize]);
+  }, [update]);
 
-  return { keyboardHeight, isKeyboardOpen };
+  return { viewportHeight, isKeyboardOpen };
 }

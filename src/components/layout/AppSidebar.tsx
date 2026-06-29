@@ -156,12 +156,25 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
       osc.stop(audioCtx.currentTime + 0.3);
     } catch {}
 
-    // Desktop Notification
+    // Show notification via Service Worker (works in background too)
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "granted") {
-        new Notification("PingMe", {
-          body: data.content || "New message received",
-          icon: "/favicon.ico",
+        // Use Service Worker notifications for background support
+        navigator.serviceWorker?.ready?.then((reg) => {
+          reg.showNotification("PingMe", {
+            body: data.content || "New message received",
+            icon: "/icons/icon-192x192.png",
+            badge: "/icons/monochrome-icon-512x512.png",
+            tag: `msg-${data.conversationId}`, // Collapse duplicate notifications
+            data: { url: `/chat/${data.conversationId}` },
+            vibrate: [100, 50, 100],
+          } as NotificationOptions);
+        }).catch(() => {
+          // Fallback to basic notification
+          new Notification("PingMe", {
+            body: data.content || "New message received",
+            icon: "/icons/icon-192x192.png",
+          });
         });
       } else if (Notification.permission === "default") {
         Notification.requestPermission();

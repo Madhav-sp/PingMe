@@ -65,7 +65,7 @@ export default function ChatViewPage({
   } = useChatStore();
   const { startCall } = useCallStore();
   const { saveDraft, getDraft } = useSessionRestore();
-  const { keyboardHeight, isKeyboardOpen } = useKeyboardHandler();
+  const { viewportHeight, isKeyboardOpen } = useKeyboardHandler();
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const [messageInput, setMessageInput] = useState("");
@@ -332,7 +332,7 @@ export default function ChatViewPage({
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       });
     }
-  }, [isKeyboardOpen, keyboardHeight]);
+  }, [isKeyboardOpen, viewportHeight]);
 
   // Scroll detection
   const handleScroll = () => {
@@ -843,15 +843,16 @@ export default function ChatViewPage({
     setIsViewerOpen(true);
   };
 
-  // Dynamic style for the composer when keyboard is open
-  const composerStyle = useMemo(() => ({
-    paddingBottom: isKeyboardOpen
-      ? `${Math.max(keyboardHeight, 0)}px`
-      : undefined,
-  }), [isKeyboardOpen, keyboardHeight]);
+  // Container height: use visualViewport.height when available, else 100%
+  const containerStyle = useMemo(() => {
+    if (viewportHeight !== null) {
+      return { height: `${viewportHeight}px` };
+    }
+    return { height: '100%' };
+  }, [viewportHeight]);
 
   return (
-    <div ref={chatContainerRef} className="chat-layout flex-1 bg-background">
+    <div ref={chatContainerRef} className="chat-layout flex-1 bg-background" style={containerStyle}>
       {/* Notion/Claude Inspired Top Navigation Bar */}
       <div className="chat-header flex items-center justify-between px-6 py-3 border-b border-border bg-card/90 backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -1331,7 +1332,7 @@ export default function ChatViewPage({
       </AnimatePresence>
 
       {/* Message Input */}
-      <div className="chat-composer px-4 py-3 border-t border-border bg-card/80 backdrop-blur-xl" style={composerStyle}>
+      <div className="chat-composer px-4 py-3 border-t border-border bg-card/80 backdrop-blur-xl">
         {isBlocked ? (
           <div className="flex items-center justify-between w-full bg-destructive/10 text-destructive px-4 py-3 rounded-xl font-medium text-sm">
             <span>You blocked this contact. Unblock to send messages.</span>

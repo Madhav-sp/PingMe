@@ -23,27 +23,9 @@ export function MainLayoutClient({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", checkMobile);
   }, [setIsMobileView, setIsSidebarOpen]);
 
-  // Prevent pull-to-refresh and viewport bounce on touch devices
-  useEffect(() => {
-    const preventOverscroll = (e: TouchEvent) => {
-      // Allow scrolling inside .chat-messages containers
-      const target = e.target as HTMLElement;
-      const scrollable = target.closest('.chat-messages, .native-scroll, [data-scrollable]');
-      if (scrollable) return;
-      
-      // Prevent everything else from scrolling the viewport
-      if (e.touches.length === 1) {
-        e.preventDefault();
-      }
-    };
-
-    document.addEventListener('touchmove', preventOverscroll, { passive: false });
-    return () => document.removeEventListener('touchmove', preventOverscroll);
-  }, []);
-
   return (
     <SocketProvider>
-      <div className="fixed inset-0 w-full h-dvh flex overflow-hidden bg-background">
+      <div className="h-full w-full flex overflow-hidden bg-background">
         <CallModal />
         {/* Sidebar */}
         <AnimatePresence mode="wait">
