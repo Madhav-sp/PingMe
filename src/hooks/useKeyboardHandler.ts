@@ -2,23 +2,23 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 
+export type KeyboardState = 'Closed' | 'Opening' | 'Open' | 'Closing';
+
 /**
- * useKeyboardHandler
+ * useKeyboardHandler (Architecture V2)
  * 
- * Accurately tracks visual viewport height and offsetTop using window.visualViewport.
- * When the keyboard opens on iOS/Android, the browser may resize the visual viewport
- * and scroll the layout viewport (changing offsetTop).
- * 
- * By returning both `viewportHeight` and `offsetTop`, the application container
- * can position itself exactly over the visible screen area, ensuring the Header
- * never moves and the Composer stays attached directly above the keyboard.
+ * Drives mobile chat layout sizing strictly via VisualViewport height without page translation.
+ * Implements a state machine (Closed → Opening → Open → Closing) to ignore transient noise
+ * and ensure zero layout shift or flickering when the virtual keyboard appears or disappears.
  */
 export function useKeyboardHandler() {
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  const [offsetTop, setOffsetTop] = useState<number>(0);
+  const [keyboardState, setKeyboardState] = useState<KeyboardState>('Closed');
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
   const maxKnownHeight = useRef<number>(0);
   const rafId = useRef<number>(0);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const update = useCallback(() => {
     if (rafId.current) cancelAnimationFrame(rafId.current);
@@ -28,19 +28,30 @@ export function useKeyboardHandler() {
       if (!vv) return;
 
       const h = Math.round(vv.height);
-      const top = Math.round(vv.offsetTop);
-
       setViewportHeight(h);
-      setOffsetTop(top);
 
       if (h > maxKnownHeight.current) {
         maxKnownHeight.current = h;
       }
 
-      // Compare current visual viewport against window.innerHeight or known max height
       const baseline = Math.max(window.innerHeight, maxKnownHeight.current);
       const diff = baseline - h;
-      setIsKeyboardOpen(diff > 120);
+      const currentlyOpen = diff > 120;
+
+      setIsKeyboardOpen((prevOpen) => {
+        if (prevOpen !== currentlyOpen) {
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+          if (currentlyOpen) {
+            setKeyboardState('Opening');
+            timeoutRef.current = setTimeout(() => setKeyboardState('Open'), 150);
+          } else {
+            setKeyboardState('Closing');
+            timeoutRef.current = setTimeout(() => setKeyboardState('Closed'), 150);
+          }
+        }
+        return currentlyOpen;
+      });
     });
   }, []);
 
@@ -56,13 +67,10 @@ export function useKeyboardHandler() {
     maxKnownHeight.current = Math.round(vv.height);
     setTimeout(() => {
       setViewportHeight(Math.round(vv.height));
-      setOffsetTop(Math.round(vv.offsetTop));
     }, 0);
 
     vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
     window.addEventListener('resize', update);
-    window.addEventListener('scroll', update);
 
     const onOrientation = () => {
       setTimeout(() => {
@@ -76,13 +84,13 @@ export function useKeyboardHandler() {
 
     return () => {
       vv.removeEventListener('resize', update);
-      vv.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update);
       window.removeEventListener('orientationchange', onOrientation);
       if (rafId.current) cancelAnimationFrame(rafId.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [update]);
 
-  return { viewportHeight, offsetTop, isKeyboardOpen };
+  // Return offsetTop: 0 permanently to guarantee zero page translation
+  return { viewportHeight, offsetTop: 0, isKeyboardOpen, keyboardState };
 }

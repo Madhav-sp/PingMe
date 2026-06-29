@@ -10,7 +10,6 @@ import {
   ArrowDown,
   Phone,
   Video,
-  Menu,
   Loader2,
   Shield,
   Send,
@@ -67,7 +66,7 @@ export default function ChatViewPage({
   } = useChatStore();
   const { startCall } = useCallStore();
   const { saveDraft, getDraft } = useSessionRestore();
-  const { viewportHeight, offsetTop, isKeyboardOpen } = useKeyboardHandler();
+  const { viewportHeight, isKeyboardOpen } = useKeyboardHandler();
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const isInitialMountRef = useRef(true);
 
@@ -861,17 +860,16 @@ export default function ChatViewPage({
     setIsViewerOpen(true);
   };
 
-  // Container height & position: align exactly to visual viewport
+  // Container height: driven strictly by VisualViewport without translations
   const containerStyle = useMemo(() => {
     if (viewportHeight !== null) {
       return {
         height: `${viewportHeight}px`,
-        transform: `translate3d(0, ${offsetTop}px, 0)`,
         width: '100%',
       };
     }
-    return { height: '100%', width: '100%' };
-  }, [viewportHeight, offsetTop]);
+    return { height: '100dvh', width: '100%' };
+  }, [viewportHeight]);
 
   return (
     <div ref={chatContainerRef} className="chat-layout flex-1 bg-background" style={containerStyle}>
@@ -1317,19 +1315,20 @@ export default function ChatViewPage({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Scroll to bottom button */}
+      {/* Floating New Messages button when scrolled upward */}
       <AnimatePresence>
         {showScrollButton && (
           <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
             onClick={() =>
               messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
             }
-            className="absolute bottom-28 right-6 p-2.5 rounded-full bg-card border border-border shadow-lg hover:bg-accent transition-colors z-10 !min-h-0 !min-w-0"
+            className="absolute bottom-28 right-6 flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90 transition-opacity z-10 font-medium text-xs cursor-pointer"
           >
-            <ArrowDown className="w-4 h-4" />
+            <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
+            <span>New Messages</span>
           </motion.button>
         )}
       </AnimatePresence>
