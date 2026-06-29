@@ -272,3 +272,24 @@ html.theme-transition *::after {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
   transition-delay: 0s !important;
 }
+
+/* PWA & Mobile Native Optimizations */
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  /* Prevent iOS zoom on inputs by ensuring minimum 16px font size */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Safe area padding for notch and home indicator devices */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}

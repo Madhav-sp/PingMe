@@ -37,6 +37,8 @@ import { useCallStore } from "@/stores/useCallStore";
 import type { Message } from "@/types";
 import { cn, formatTime, getInitials } from "@/lib/utils";
 import { toast } from "sonner";
+import { useSessionRestore } from "@/hooks/useSessionRestore";
+import { triggerHaptic } from "@/lib/haptics";
 
 export default function ChatViewPage({
   params,
@@ -61,8 +63,17 @@ export default function ChatViewPage({
     clearChat,
   } = useChatStore();
   const { startCall } = useCallStore();
+  const { saveDraft, getDraft } = useSessionRestore();
 
   const [messageInput, setMessageInput] = useState("");
+
+  useEffect(() => {
+    const draft = getDraft(conversationId);
+    if (draft) {
+      const timer = setTimeout(() => setMessageInput(draft), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [conversationId, getDraft]);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -503,6 +514,14 @@ export default function ChatViewPage({
     );
 
     setMessageInput("");
+    saveDraft(conversationId, "");
+    triggerHaptic("light");
+    try {
+      const count = parseInt(localStorage.getItem("pingme_msg_count") || "0", 10) + 1;
+      localStorage.setItem("pingme_msg_count", count.toString());
+      window.dispatchEvent(new Event("pingme_message_sent"));
+    } catch {}
+
     setReplyingTo(null);
     inputRef.current?.focus();
 
@@ -662,6 +681,7 @@ export default function ChatViewPage({
   // Typing indicator
   const handleInputChange = (value: string) => {
     setMessageInput(value);
+    saveDraft(conversationId, value);
     emit("typing", { conversationId, isTyping: true });
     fetch(`/api/conversations/${conversationId}/typing`, {
       method: "POST",
@@ -698,8 +718,16 @@ export default function ChatViewPage({
         break;
 
       case "copy":
-        await navigator.clipboard.writeText(message.content);
-        toast.success("Copied to clipboard");
+        triggerHaptic("light");
+        if (navigator.share && /iPad|iPhone|iPod|Android/.test(navigator.userAgent)) {
+          navigator.share({ text: message.content }).catch(() => {
+            navigator.clipboard.writeText(message.content);
+            toast.success("Copied to clipboard");
+          });
+        } else {
+          await navigator.clipboard.writeText(message.content);
+          toast.success("Copied to clipboard");
+        }
         break;
 
       case "edit":

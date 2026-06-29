@@ -1,11 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { MessageCircle, Search, Menu } from "lucide-react";
 import { useChatStore } from "@/stores/useChatStore";
+import { useSessionRestore } from "@/hooks/useSessionRestore";
 
 export default function ChatPage() {
   const { isMobileView, setIsSidebarOpen } = useChatStore();
+  const { restoreLastSession } = useSessionRestore();
+
+  useEffect(() => {
+    restoreLastSession();
+  }, [restoreLastSession]);
 
   return (
     <div className="flex-1 flex items-center justify-center bg-background">
