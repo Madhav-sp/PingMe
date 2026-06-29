@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { subscribeToPush, isPushSupported } from "@/lib/pushNotifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
@@ -210,13 +211,27 @@ export default function SettingsPage() {
         {/* Notifications Section */}
         {activeSection === "notifications" && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <div className="p-5 rounded-2xl bg-card border border-border">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <div className="p-5 rounded-2xl bg-card border border-border space-y-4">
+              <h3 className="font-semibold flex items-center gap-2">
                 <Bell className="w-4 h-4" /> Notifications
               </h3>
               <p className="text-sm text-muted-foreground">
-                Browser notifications are managed through your browser settings.
+                To receive push notifications on iOS and mobile devices, tap below while running as an installed app.
               </p>
+              <button
+                onClick={async () => {
+                  if (!isPushSupported()) {
+                    toast.error("Push notifications are not supported on this browser or device.");
+                    return;
+                  }
+                  const sub = await subscribeToPush();
+                  if (sub) toast.success("Push notifications enabled!");
+                  else toast.error("Could not enable notifications. Check permissions.");
+                }}
+                className="px-5 py-2.5 rounded-xl bg-primary text-white font-medium text-sm shadow-md hover:bg-primary/90 transition-all"
+              >
+                Enable Push Notifications
+              </button>
             </div>
           </motion.div>
         )}

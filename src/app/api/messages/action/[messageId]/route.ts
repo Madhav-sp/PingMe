@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { encrypt } from "@/lib/encryption";
+import { destroyCloudinaryFile } from "@/lib/cloudinaryDestroy";
 
 export async function PATCH(
   req: NextRequest,
@@ -50,9 +51,24 @@ export async function PATCH(
       if (message.senderId !== userId) {
         return NextResponse.json({ error: "Can only delete your own messages" }, { status: 403 });
       }
+      if (message.fileUrl) {
+        await destroyCloudinaryFile(message.fileUrl);
+      }
       await prisma.message.update({
         where: { id: messageId },
         data: { deletedForAll: true, content: "", contentIv: null, fileUrl: null, fileName: null, fileSize: null },
+      });
+      return NextResponse.json({ success: true });
+    }
+
+    case "viewOnce": {
+      // Receiver or sender can trigger view once closure
+      if (message.fileUrl) {
+        await destroyCloudinaryFile(message.fileUrl);
+      }
+      await prisma.message.update({
+        where: { id: messageId },
+        data: { content: "🔥 Expired snap", contentIv: null, fileUrl: null, fileName: null, fileSize: null, deletedForAll: true },
       });
       return NextResponse.json({ success: true });
     }

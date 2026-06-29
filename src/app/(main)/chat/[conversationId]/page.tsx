@@ -1687,6 +1687,20 @@ export default function ChatViewPage({
         mediaList={allMediaItems}
         initialIndex={viewerInitialIndex}
         currentUserId={currentUserId}
+        onViewOnceClose={async (id, wasSaved) => {
+          if (!wasSaved) {
+            try {
+              await fetch(`/api/messages/action/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "viewOnce" }),
+              });
+              queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+            } catch {
+              // ignore
+            }
+          }
+        }}
       />
     </div>
   );

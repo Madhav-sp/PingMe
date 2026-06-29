@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
+import { destroyCloudinaryFile } from "@/lib/cloudinaryDestroy";
 
 export async function GET(
   req: NextRequest,
@@ -64,11 +65,12 @@ export async function GET(
   const now = new Date();
 
   // Asynchronously clean up expired messages in background
-  const expiredIds = rawMessages
-    .filter((msg) => msg.expiresAt && msg.expiresAt <= now)
-    .map((msg) => msg.id);
-
-  if (expiredIds.length > 0) {
+  const expiredMsgs = rawMessages.filter((msg) => msg.expiresAt && msg.expiresAt <= now);
+  if (expiredMsgs.length > 0) {
+    expiredMsgs.forEach((m) => {
+      if (m.fileUrl) destroyCloudinaryFile(m.fileUrl).catch(() => {});
+    });
+    const expiredIds = expiredMsgs.map((m) => m.id);
     prisma.message.deleteMany({ where: { id: { in: expiredIds } } }).catch(console.error);
   }
 

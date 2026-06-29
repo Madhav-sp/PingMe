@@ -19,6 +19,7 @@ interface MediaViewerModalProps {
   initialIndex?: number;
   onDelete?: (id: string) => void;
   currentUserId?: string;
+  onViewOnceClose?: (id: string, wasSaved: boolean) => void;
 }
 
 export function MediaViewerModal({
@@ -28,14 +29,17 @@ export function MediaViewerModal({
   initialIndex = 0,
   onDelete,
   currentUserId,
+  onViewOnceClose,
 }: MediaViewerModalProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [scale, setScale] = useState(1);
+  const [hasSaved, setHasSaved] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => {
       setCurrentIndex(initialIndex);
       setScale(1);
+      setHasSaved(false);
     });
   }, [initialIndex, isOpen]);
 
@@ -43,12 +47,27 @@ export function MediaViewerModal({
 
   const currentMedia = mediaList[currentIndex] || mediaList[0];
 
+  const triggerViewOnceCheck = () => {
+    if (onViewOnceClose && currentMedia) {
+      onViewOnceClose(currentMedia.id, hasSaved);
+    }
+  };
+
+  const handleModalClose = () => {
+    triggerViewOnceCheck();
+    onClose();
+  };
+
   const handlePrev = () => {
+    triggerViewOnceCheck();
+    setHasSaved(false);
     setScale(1);
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : mediaList.length - 1));
   };
 
   const handleNext = () => {
+    triggerViewOnceCheck();
+    setHasSaved(false);
     setScale(1);
     setCurrentIndex((prev) => (prev < mediaList.length - 1 ? prev + 1 : 0));
   };
@@ -58,6 +77,7 @@ export function MediaViewerModal({
   const handleResetZoom = () => setScale(1);
 
   const handleDownload = async () => {
+    setHasSaved(true);
     try {
       const response = await fetch(currentMedia.url);
       const blob = await response.blob();
@@ -128,7 +148,7 @@ export function MediaViewerModal({
                 onClick={() => {
                   if (confirm("Delete this media?")) {
                     onDelete(currentMedia.id);
-                    if (mediaList.length <= 1) onClose();
+                    if (mediaList.length <= 1) handleModalClose();
                     else handleNext();
                   }
                 }}
@@ -140,7 +160,7 @@ export function MediaViewerModal({
             )}
 
             <button
-              onClick={onClose}
+              onClick={handleModalClose}
               className="p-2 ml-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
               title="Close Viewer"
             >
