@@ -21,6 +21,7 @@ import {
   Star,
   Plus,
   CheckSquare,
+  BellOff,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
@@ -39,7 +40,7 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
-  const { selectedConversation, setSelectedConversation, setSelectedUser, isMobileView, archivedIds, favoriteIds, toggleArchive } = useChatStore();
+  const { selectedConversation, setSelectedConversation, setSelectedUser, isMobileView, archivedIds, favoriteIds, toggleArchive, notificationsEnabled, setNotificationsEnabled } = useChatStore();
   const { unreadCount, addNotification } = useNotificationStore();
   const { on, off, isConnected } = useSocket();
 
@@ -122,6 +123,44 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
     refetchConversations();
   }, [refetchConversations]);
 
+  const handleReceiveMessage = useCallback((payload: unknown) => {
+    refetchConversations();
+    const data = payload as { conversationId?: string; content?: string; senderId?: string };
+    if (!data?.conversationId || archivedIds.includes(data.conversationId)) return;
+    if (!notificationsEnabled) return;
+
+    // Don't notify if user is currently looking at this active conversation
+    if (pathname === `/chat/${data.conversationId}` && !document.hidden) return;
+
+    // Audio beep/chime
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1); // A5
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+    } catch {}
+
+    // Desktop Notification
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "granted") {
+        new Notification("PingMe", {
+          body: data.content || "New message received",
+          icon: "/favicon.ico",
+        });
+      } else if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+  }, [refetchConversations, archivedIds, notificationsEnabled, pathname]);
+
   const handleNotification = useCallback(
     (notification: unknown) => {
       addNotification(notification as Notification);
@@ -131,14 +170,14 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
 
   useEffect(() => {
     on("newMessage", handleNewMessage);
-    on("receiveMessage", handleNewMessage);
+    on("receiveMessage", handleReceiveMessage);
     on("notification", handleNotification);
     return () => {
       off("newMessage", handleNewMessage);
-      off("receiveMessage", handleNewMessage);
+      off("receiveMessage", handleReceiveMessage);
       off("notification", handleNotification);
     };
-  }, [on, off, handleNewMessage, handleNotification]);
+  }, [on, off, handleNewMessage, handleReceiveMessage, handleNotification]);
 
   // Search
   useEffect(() => {
@@ -226,6 +265,22 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
                 {unreadCount + pendingCount}
               </span>
             )}
+          </button>
+
+          {/* Notification Toggle */}
+          <button
+            onClick={() => {
+              const nextState = !notificationsEnabled;
+              setNotificationsEnabled(nextState);
+              if (nextState && typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+                Notification.requestPermission();
+              }
+              toast.info(nextState ? "Notifications turned ON" : "Notifications turned OFF");
+            }}
+            className="p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors text-muted-foreground hover:text-foreground"
+            title={notificationsEnabled ? "Mute Notifications" : "Unmute Notifications"}
+          >
+            {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4 text-muted-foreground" />}
           </button>
 
           {/* Theme Toggle */}

@@ -27,6 +27,7 @@ import {
   Archive,
   Clock,
   Camera,
+  Ban,
 } from "lucide-react";
 import { MediaUploadModal } from "@/components/chat/MediaUploadModal";
 import { MediaViewerModal, type MediaItem } from "@/components/chat/MediaViewerModal";
@@ -132,8 +133,63 @@ export default function ChatViewPage({
     refetchInterval: 2000,
   });
 
-  const allMessages: Message[] =
-    data?.pages?.flatMap((page) => page.data) || [];
+  // Block status query
+  const { data: blockData, refetch: refetchBlock } = useQuery({
+    queryKey: ["blockStatus", selectedUser?.id],
+    queryFn: async () => {
+      if (!selectedUser?.id) return { isBlocked: false, hasBlockedMe: false };
+      const res = await fetch(`/api/users/${selectedUser.id}/block`);
+      if (!res.ok) return { isBlocked: false, hasBlockedMe: false };
+      return res.json();
+    },
+    enabled: !!selectedUser?.id,
+  });
+  const isBlocked = blockData?.isBlocked || false;
+
+  const handleToggleBlock = async () => {
+    if (!selectedUser) return;
+    const nextState = !isBlocked;
+    if (nextState && !confirm(`Are you sure you want to ${nextState ? "block" : "unblock"} ${selectedUser.displayName}?`)) return;
+    try {
+      const res = await fetch(`/api/users/${selectedUser.id}/block`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ block: nextState }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast.success(nextState ? `Blocked ${selectedUser.displayName}` : `Unblocked ${selectedUser.displayName}`);
+      refetchBlock();
+    } catch {
+      toast.error("Failed to update block status");
+    }
+  };
+
+  const rawMessages = data?.pages?.flatMap((page) => page.data) || [];
+  const uniqueMessagesMap = new Map<string, Message>();
+  rawMessages.forEach((msg, idx) => {
+    if (msg) uniqueMessagesMap.set(msg.id || msg.tempId || `temp_${idx}`, msg);
+  });
+  const allMessages: Message[] = Array.from(uniqueMessagesMap.values()).sort(
+    (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+  );
+
+  // Stop typing on chat switch or unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      emit("typing", { conversationId, isTyping: false });
+      fetch(`/api/conversations/${conversationId}/typing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isTyping: false }),
+      }).catch(() => {});
+    };
+  }, [conversationId, emit]);
+
+  // Emit markRead when chat opens
+  useEffect(() => {
+    emit("markRead", { conversationId });
+  }, [conversationId, emit]);
 
   // Socket: receive messages
   const handleReceiveMessage = useCallback(
@@ -145,7 +201,6 @@ export default function ChatViewPage({
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (old: any) => {
             if (!old || !old.pages || old.pages.length === 0) return old;
-            // Check if message already exists across any page
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const exists = old.pages.some((page: any) =>
               page.data.some((m: Message) => m.id === message.id)
@@ -195,13 +250,28 @@ export default function ChatViewPage({
   // Socket: read receipt
   const handleReadReceipt = useCallback(
     (payload: unknown) => {
-      const data = payload as { messageId: string; conversationId: string };
+      const data = payload as { messageId?: string; conversationId: string };
       if (data.conversationId === conversationId) {
         queryClient.setQueryData(
           ["messages", conversationId],
-          (old: typeof data) => {
-            if (!old) return old;
-            return old;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (old: any) => {
+            if (!old || !old.pages) return old;
+            return {
+              ...old,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              pages: old.pages.map((page: any) => ({
+                ...page,
+                data: page.data.map((m: Message) => {
+                  if (m.senderId === currentUserId && m.status !== "READ") {
+                    if (!data.messageId || m.id === data.messageId) {
+                      return { ...m, status: "READ" };
+                    }
+                  }
+                  return m;
+                }),
+              })),
+            };
           }
         );
         queryClient.invalidateQueries({
@@ -209,7 +279,7 @@ export default function ChatViewPage({
         });
       }
     },
-    [conversationId, queryClient]
+    [conversationId, queryClient, currentUserId]
   );
 
   useEffect(() => {
@@ -390,12 +460,12 @@ export default function ChatViewPage({
       ["messages", conversationId],
       (old: typeof data) => {
         if (!old) return old;
-        const lastPage = old.pages[old.pages.length - 1];
+        const firstPage = old.pages[0];
         return {
           ...old,
           pages: [
-            ...old.pages.slice(0, -1),
-            { ...lastPage, data: [...lastPage.data, optimisticMessage] },
+            { ...firstPage, data: [...firstPage.data, optimisticMessage] },
+            ...old.pages.slice(1),
           ],
         };
       }
@@ -490,10 +560,10 @@ export default function ChatViewPage({
 
     queryClient.setQueryData(["messages", conversationId], (old: typeof data) => {
       if (!old) return old;
-      const lastPage = old.pages[old.pages.length - 1];
+      const firstPage = old.pages[0];
       return {
         ...old,
-        pages: [...old.pages.slice(0, -1), { ...lastPage, data: [...lastPage.data, optimisticMessage] }],
+        pages: [{ ...firstPage, data: [...firstPage.data, optimisticMessage] }, ...old.pages.slice(1)],
       };
     });
 
@@ -757,6 +827,16 @@ export default function ChatViewPage({
           >
             <Video className="w-4 h-4" />
           </button>
+          <button
+            onClick={handleToggleBlock}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              isBlocked ? "bg-destructive/10 text-destructive hover:bg-destructive/20" : "hover:bg-accent text-muted-foreground hover:text-foreground"
+            )}
+            title={isBlocked ? "Unblock User" : "Block User"}
+          >
+            <Ban className="w-4 h-4" />
+          </button>
 
           {/* More Options Menu Button */}
           <div className="relative">
@@ -823,6 +903,21 @@ export default function ChatViewPage({
                     >
                       <Archive className="w-3.5 h-3.5 text-muted-foreground" />
                       {isArchived ? "Unarchive Conversation" : "Archive Conversation"}
+                    </button>
+
+                    {/* Block User Button */}
+                    <button
+                      onClick={() => {
+                        setShowConvOptions(false);
+                        handleToggleBlock();
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors font-medium",
+                        isBlocked ? "hover:bg-accent text-foreground" : "hover:bg-destructive/10 text-destructive"
+                      )}
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      {isBlocked ? "Unblock Contact" : "Block Contact"}
                     </button>
 
                     {/* Delete Chat Button */}
@@ -1141,7 +1236,17 @@ export default function ChatViewPage({
 
       {/* Message Input */}
       <div className="px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-border bg-card/80 backdrop-blur-xl flex-shrink-0">
-        {isRecording ? (
+        {isBlocked ? (
+          <div className="flex items-center justify-between w-full bg-destructive/10 text-destructive px-4 py-3 rounded-xl font-medium text-sm">
+            <span>You blocked this contact. Unblock to send messages.</span>
+            <button
+              onClick={handleToggleBlock}
+              className="px-3 py-1.5 bg-destructive text-destructive-foreground rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity"
+            >
+              Unblock
+            </button>
+          </div>
+        ) : isRecording ? (
           <div className="flex items-center justify-between w-full bg-destructive/10 text-destructive px-4 py-2 rounded-xl">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-destructive animate-pulse" />

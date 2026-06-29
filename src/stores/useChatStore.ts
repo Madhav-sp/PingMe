@@ -12,12 +12,14 @@ interface ChatState {
   archivedIds: string[];
   favoriteIds: string[];
   disappearingSettings: Record<string, string>; // convId -> "24h" | "7d" | "off"
+  notificationsEnabled: boolean;
 
   setSelectedConversation: (conversation: Conversation | null) => void;
   setSelectedUser: (user: User | null) => void;
   setIsSidebarOpen: (open: boolean) => void;
   setIsMobileView: (isMobile: boolean) => void;
   setReplyingTo: (reply: { id: string; content: string; senderName: string } | null) => void;
+  setNotificationsEnabled: (enabled: boolean) => void;
   clearChat: () => void;
 
   toggleArchive: (id: string) => void;
@@ -37,6 +39,7 @@ export const useChatStore = create<ChatState>()(
       archivedIds: [],
       favoriteIds: [],
       disappearingSettings: {},
+      notificationsEnabled: true,
 
       setSelectedConversation: (conversation) =>
         set({ selectedConversation: conversation }),
@@ -44,6 +47,7 @@ export const useChatStore = create<ChatState>()(
       setIsSidebarOpen: (open) => set({ isSidebarOpen: open }),
       setIsMobileView: (isMobile) => set({ isMobileView: isMobile }),
       setReplyingTo: (reply) => set({ replyingTo: reply }),
+      setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
       clearChat: () =>
         set({
           selectedConversation: null,

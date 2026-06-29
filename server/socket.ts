@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from "socket.io";
 import type { Server as HTTPServer } from "http";
+import prisma from "../src/lib/prisma";
 
 export interface SocketServer extends HTTPServer {
   io?: SocketIOServer;
@@ -66,13 +67,32 @@ export function initSocketServer(server: SocketServer): SocketIOServer {
       });
     });
 
-    socket.on("markRead", (data: { messageId: string; conversationId: string; senderId: string }) => {
+    socket.on("markRead", async (data: { messageId?: string; conversationId: string; senderId?: string }) => {
+      if (data.messageId) {
+        prisma.message.update({
+          where: { id: data.messageId },
+          data: { status: "READ" },
+        }).catch(() => {});
+      } else if (userId && data.conversationId) {
+        prisma.message.updateMany({
+          where: { conversationId: data.conversationId, receiverId: userId, status: { not: "READ" } },
+          data: { status: "READ" },
+        }).catch(() => {});
+      }
+
       // Notify message sender about read receipt
-      io.to(`user:${data.senderId}`).emit("readReceipt", {
-        messageId: data.messageId,
-        conversationId: data.conversationId,
-        readBy: userId,
-      });
+      if (data.senderId) {
+        io.to(`user:${data.senderId}`).emit("readReceipt", {
+          messageId: data.messageId,
+          conversationId: data.conversationId,
+          readBy: userId,
+        });
+      } else {
+        socket.to(data.conversationId).emit("readReceipt", {
+          conversationId: data.conversationId,
+          readBy: userId,
+        });
+      }
     });
 
     // WebRTC Signaling

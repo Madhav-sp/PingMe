@@ -35,6 +35,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Conversation invalid" }, { status: 400 });
   }
 
+  // Check if blocked
+  const blocked = await prisma.blockedUser.findFirst({
+    where: {
+      OR: [
+        { blockerId: senderId, blockedId: otherParticipant.userId },
+        { blockerId: otherParticipant.userId, blockedId: senderId },
+      ],
+    },
+  });
+
+  if (blocked) {
+    return NextResponse.json({ error: "Cannot send message to blocked user" }, { status: 403 });
+  }
+
   // Check conversation disappearing mode
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },

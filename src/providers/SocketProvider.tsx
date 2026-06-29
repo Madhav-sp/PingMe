@@ -37,12 +37,13 @@ interface SocketProviderProps {
 
 export function SocketProvider({ children }: SocketProviderProps) {
   const { data: session, status } = useSession();
+  const userId = (session?.user as Record<string, unknown>)?.id as string | undefined;
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    if (status !== "authenticated" || !session?.user?.id) {
+    if (status !== "authenticated" || !userId) {
       return;
     }
 
@@ -107,22 +108,22 @@ export function SocketProvider({ children }: SocketProviderProps) {
       setSocket(null);
       setIsConnected(false);
     };
-  }, [session?.user, status]);
+  }, [userId, status]);
 
   const emit = useCallback(
     (event: string, data?: unknown) => {
-      if (socketRef.current?.connected) {
+      if (socketRef.current) {
         socketRef.current.emit(event, data);
       }
     },
-    []
+    [socket]
   );
 
   const on = useCallback(
     (event: string, callback: (...args: unknown[]) => void) => {
       socketRef.current?.on(event, callback);
     },
-    []
+    [socket]
   );
 
   const off = useCallback(
@@ -133,7 +134,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
         socketRef.current?.off(event);
       }
     },
-    []
+    [socket]
   );
 
   return (

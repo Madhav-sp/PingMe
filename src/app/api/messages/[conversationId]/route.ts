@@ -121,11 +121,21 @@ export async function GET(
     })
     .reverse(); // Reverse to show oldest first
 
-  // Reset unread count
-  await prisma.conversationParticipant.updateMany({
-    where: { conversationId, userId },
-    data: { unreadCount: 0, lastReadAt: new Date() },
-  });
+  // Reset unread count and mark received messages as READ
+  await Promise.all([
+    prisma.conversationParticipant.updateMany({
+      where: { conversationId, userId },
+      data: { unreadCount: 0, lastReadAt: new Date() },
+    }),
+    prisma.message.updateMany({
+      where: {
+        conversationId,
+        receiverId: userId,
+        status: { not: "READ" },
+      },
+      data: { status: "READ" },
+    }),
+  ]);
 
   return NextResponse.json({
     data: decryptedMessages,
