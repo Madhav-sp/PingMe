@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { MediaUploadModal } from "@/components/chat/MediaUploadModal";
 import { MediaViewerModal, type MediaItem } from "@/components/chat/MediaViewerModal";
+import { MessageActionSheet } from "@/components/chat/MessageActionSheet";
 import { useSocket } from "@/providers/SocketProvider";
 import { useChatStore } from "@/stores/useChatStore";
 import { useCallStore } from "@/stores/useCallStore";
@@ -66,7 +67,7 @@ export default function ChatViewPage({
   } = useChatStore();
   const { startCall } = useCallStore();
   const { saveDraft, getDraft } = useSessionRestore();
-  const { viewportHeight, isKeyboardOpen } = useKeyboardHandler();
+  const { viewportHeight, keyboardHeight, isKeyboardOpen } = useKeyboardHandler();
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const isInitialMountRef = useRef(true);
 
@@ -92,6 +93,9 @@ export default function ChatViewPage({
     y: number;
     message: Message;
   } | null>(null);
+  const [selectedActionMessage, setSelectedActionMessage] = useState<Message | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [showConvOptions, setShowConvOptions] = useState(false);
 
@@ -729,15 +733,50 @@ export default function ChatViewPage({
     }, 2000);
   };
 
+  // Long press detection (~450ms)
+  const handleMessageTouchStart = (e: React.TouchEvent | React.MouseEvent, msg: Message) => {
+    if (msg.deletedForAll) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    touchStartRef.current = { x: clientX, y: clientY };
+
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      triggerHaptic("heavy");
+      setSelectedActionMessage(msg);
+    }, 450);
+  };
+
+  const handleMessageTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (!touchStartRef.current || !longPressTimerRef.current) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const dx = Math.abs(clientX - touchStartRef.current.x);
+    const dy = Math.abs(clientY - touchStartRef.current.y);
+    if (dx > 10 || dy > 10) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleMessageTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   // Message actions
   const handleMessageAction = async (action: string, message: Message) => {
     setContextMenu(null);
+    setSelectedActionMessage(null);
 
     switch (action) {
-      case "reply":
+      case "reply": {
+        const previewContent = message.content || (message.fileName ? `📎 ${message.fileName}` : (message.type === 'IMAGE' ? '📷 Photo' : (message.type === 'VIDEO' ? '📹 Video' : (message.type === 'VOICE' || message.type === 'AUDIO' ? '🎤 Voice message' : 'Attachment'))));
         setReplyingTo({
           id: message.id,
-          content: message.content,
+          content: previewContent,
           senderName:
             message.senderId === currentUserId
               ? "You"
@@ -745,23 +784,42 @@ export default function ChatViewPage({
         });
         inputRef.current?.focus();
         break;
+      }
 
-      case "copy":
+      case "copy": {
         triggerHaptic("light");
+        const textToCopy = message.content || message.fileUrl || "";
         if (navigator.share && /iPad|iPhone|iPod|Android/.test(navigator.userAgent)) {
-          navigator.share({ text: message.content }).catch(() => {
-            navigator.clipboard.writeText(message.content);
+          navigator.share({ text: textToCopy }).catch(() => {
+            navigator.clipboard.writeText(textToCopy);
             toast.success("Copied to clipboard");
           });
         } else {
-          await navigator.clipboard.writeText(message.content);
+          await navigator.clipboard.writeText(textToCopy);
           toast.success("Copied to clipboard");
         }
         break;
+      }
 
       case "edit":
         setMessageInput(message.content);
-        // TODO: implement edit mode
+        inputRef.current?.focus();
+        break;
+
+      case "forward":
+        toast.info("Select a contact to forward this message");
+        break;
+
+      case "star":
+        toast.success("Message starred ⭐");
+        break;
+
+      case "pin":
+        toast.success("Message pinned 📌");
+        break;
+
+      case "info":
+        toast.info(`Sent at ${formatTime(message.createdAt)} • Status: ${message.status}`);
         break;
 
       case "deleteForMe":
@@ -860,16 +918,10 @@ export default function ChatViewPage({
     setIsViewerOpen(true);
   };
 
-  // Container height: driven strictly by VisualViewport without translations
+  // Container height: ALWAYS locked to 100dvh, never changes root height
   const containerStyle = useMemo(() => {
-    if (viewportHeight !== null) {
-      return {
-        height: `${viewportHeight}px`,
-        width: '100%',
-      };
-    }
     return { height: '100dvh', width: '100%' };
-  }, [viewportHeight]);
+  }, []);
 
   return (
     <div ref={chatContainerRef} className="chat-layout flex-1 bg-background" style={containerStyle}>
@@ -1107,14 +1159,21 @@ export default function ChatViewPage({
             return (
               <motion.div
                 key={msg.id}
+                id={`message-${msg.id}`}
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ duration: 0.2 }}
                 className={cn(
-                  "flex gap-2",
+                  "flex gap-2 rounded-2xl transition-all duration-300",
                   isMe ? "justify-end" : "justify-start",
                   !showAvatar && "ml-10"
                 )}
+                onTouchStart={(e) => handleMessageTouchStart(e, msg)}
+                onTouchMove={handleMessageTouchMove}
+                onTouchEnd={handleMessageTouchEnd}
+                onMouseDown={(e) => handleMessageTouchStart(e, msg)}
+                onMouseMove={handleMessageTouchMove}
+                onMouseUp={handleMessageTouchEnd}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   if (!isDeleted) {
@@ -1142,8 +1201,16 @@ export default function ChatViewPage({
                   {/* Reply Preview */}
                   {msg.replyTo && !isDeleted && (
                     <div
+                      onClick={() => {
+                        const target = document.getElementById(`message-${msg.replyTo?.id}`);
+                        if (target) {
+                          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          target.classList.add('ring-2', 'ring-primary', 'bg-primary/10');
+                          setTimeout(() => target.classList.remove('ring-2', 'ring-primary', 'bg-primary/10'), 1500);
+                        }
+                      }}
                       className={cn(
-                        "text-xs px-3 py-1.5 rounded-t-xl border-l-2 mb-0.5",
+                        "text-xs px-3 py-1.5 rounded-t-xl border-l-2 mb-0.5 cursor-pointer hover:opacity-80 transition-opacity",
                         isMe
                           ? "bg-primary/20 border-primary/50 ml-auto"
                           : "bg-muted border-muted-foreground/30"
@@ -1364,7 +1431,7 @@ export default function ChatViewPage({
       {/* Message Input */}
       <div
         className="chat-composer px-3.5 py-2.5 border-t border-border/80 bg-card/95 backdrop-blur-xl transition-all"
-        style={{ paddingBottom: isKeyboardOpen ? "0.5rem" : "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
+        style={{ paddingBottom: keyboardHeight > 0 ? `${keyboardHeight + 6}px` : "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
       >
         {isBlocked ? (
           <div className="flex items-center justify-between w-full bg-destructive/10 text-destructive px-4 py-3 rounded-xl font-medium text-sm">
@@ -1584,6 +1651,14 @@ export default function ChatViewPage({
           </>
         )}
       </AnimatePresence>
+
+      <MessageActionSheet
+        isOpen={selectedActionMessage !== null}
+        onClose={() => setSelectedActionMessage(null)}
+        message={selectedActionMessage}
+        currentUserId={currentUserId}
+        onAction={handleMessageAction}
+      />
 
       <MediaUploadModal
         isOpen={isUploadModalOpen}

@@ -52,7 +52,7 @@ export async function PATCH(
       }
       await prisma.message.update({
         where: { id: messageId },
-        data: { deletedForAll: true, content: "", contentIv: null },
+        data: { deletedForAll: true, content: "", contentIv: null, fileUrl: null, fileName: null, fileSize: null },
       });
       return NextResponse.json({ success: true });
     }

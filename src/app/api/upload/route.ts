@@ -15,6 +15,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      console.error("Cloudinary credentials missing in server environment");
+      return NextResponse.json({ error: "Server upload configuration missing" }, { status: 500 });
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
 
@@ -22,23 +27,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
+    // 10MB limit enforcement
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: "File size exceeds 10MB limit" }, { status: 400 });
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const base64Data = buffer.toString("base64");
     const dataUri = `data:${file.type || "application/octet-stream"};base64,${base64Data}`;
 
-    // Determine resource type based on mime type
-    let resourceType: "auto" | "image" | "video" | "raw" = "auto";
-    if (file.type.startsWith("image/")) resourceType = "image";
-    else if (file.type.startsWith("video/") || file.type.startsWith("audio/")) resourceType = "video";
-    else if (file.type === "application/pdf") resourceType = "image"; // Cloudinary treats PDF pages as images or raw
-
+    // Use auto resource type so Cloudinary handles images, videos, audio, and documents (raw) reliably
     const uploadOptions: Record<string, unknown> = {
       folder: "pingme_media",
-      resource_type: resourceType,
+      resource_type: "auto",
     };
 
-    if (resourceType === "image") {
+    if (file.type.startsWith("image/")) {
       uploadOptions.quality = "auto";
       uploadOptions.fetch_format = "auto";
     }
@@ -53,11 +58,15 @@ export async function POST(req: NextRequest) {
       width: uploadResponse.width,
       height: uploadResponse.height,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Cloudinary upload error:", error);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const err = error as any;
+    const msg = err?.message || err?.error?.message || (typeof error === "string" ? error : "Failed to upload media to Cloudinary");
+    const status = err?.http_code || 500;
     return NextResponse.json(
-      { error: "Failed to upload media to Cloudinary" },
-      { status: 500 }
+      { error: msg },
+      { status }
     );
   }
 }

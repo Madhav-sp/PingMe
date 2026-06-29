@@ -5,14 +5,15 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 export type KeyboardState = 'Closed' | 'Opening' | 'Open' | 'Closing';
 
 /**
- * useKeyboardHandler (Architecture V2)
+ * useKeyboardHandler (Architecture V2 Production Final)
  * 
- * Drives mobile chat layout sizing strictly via VisualViewport height without page translation.
- * Implements a state machine (Closed → Opening → Open → Closing) to ignore transient noise
- * and ensure zero layout shift or flickering when the virtual keyboard appears or disappears.
+ * Drives mobile chat layout sizing strictly via VisualViewport awareness without page translation.
+ * Returns `keyboardHeight` so only the composer bottom offset adjusts, allowing flex:1 message list
+ * to resize naturally while keeping the root container locked at 100dvh.
  */
 export function useKeyboardHandler() {
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
   const [keyboardState, setKeyboardState] = useState<KeyboardState>('Closed');
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
@@ -36,7 +37,17 @@ export function useKeyboardHandler() {
 
       const baseline = Math.max(window.innerHeight, maxKnownHeight.current);
       const diff = baseline - h;
-      const currentlyOpen = diff > 120;
+      const currentlyOpen = diff > 100;
+
+      if (currentlyOpen) {
+        setKeyboardHeight(diff);
+        // Ensure Safari does not pan the document layout viewport
+        if (window.scrollY !== 0 || window.scrollX !== 0) {
+          window.scrollTo(0, 0);
+        }
+      } else {
+        setKeyboardHeight(0);
+      }
 
       setIsKeyboardOpen((prevOpen) => {
         if (prevOpen !== currentlyOpen) {
@@ -70,6 +81,7 @@ export function useKeyboardHandler() {
     }, 0);
 
     vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
     window.addEventListener('resize', update);
 
     const onOrientation = () => {
@@ -84,6 +96,7 @@ export function useKeyboardHandler() {
 
     return () => {
       vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
       window.removeEventListener('orientationchange', onOrientation);
       if (rafId.current) cancelAnimationFrame(rafId.current);
@@ -91,6 +104,5 @@ export function useKeyboardHandler() {
     };
   }, [update]);
 
-  // Return offsetTop: 0 permanently to guarantee zero page translation
-  return { viewportHeight, offsetTop: 0, isKeyboardOpen, keyboardState };
+  return { viewportHeight, keyboardHeight, offsetTop: 0, isKeyboardOpen, keyboardState };
 }
