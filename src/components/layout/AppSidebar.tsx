@@ -37,12 +37,19 @@ interface AppSidebarProps {
 
 export function AppSidebar({ onClose }: AppSidebarProps) {
   const { data: session } = useSession();
+  const userId = (session?.user as Record<string, unknown>)?.id as string | undefined;
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const { selectedConversation, setSelectedConversation, setSelectedUser, isMobileView, archivedIds, favoriteIds, toggleArchive, notificationsEnabled, setNotificationsEnabled } = useChatStore();
   const { unreadCount, addNotification } = useNotificationStore();
   const { on, off, isConnected } = useSocket();
+
+  useEffect(() => {
+    if (notificationsEnabled && typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, [notificationsEnabled]);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -127,10 +134,11 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
     refetchConversations();
     const data = payload as { conversationId?: string; content?: string; senderId?: string };
     if (!data?.conversationId || archivedIds.includes(data.conversationId)) return;
+    if (userId && data.senderId === userId) return;
     if (!notificationsEnabled) return;
 
     // Don't notify if user is currently looking at this active conversation
-    if (pathname === `/chat/${data.conversationId}` && !document.hidden) return;
+    if (pathname.startsWith(`/chat/${data.conversationId}`) && !document.hidden) return;
 
     // Audio beep/chime
     try {
@@ -159,7 +167,7 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
         Notification.requestPermission();
       }
     }
-  }, [refetchConversations, archivedIds, notificationsEnabled, pathname]);
+  }, [refetchConversations, archivedIds, userId, notificationsEnabled, pathname]);
 
   const handleNotification = useCallback(
     (notification: unknown) => {

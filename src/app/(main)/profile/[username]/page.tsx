@@ -43,8 +43,8 @@ export default function UserProfilePage({
       return res.json();
     },
     onSuccess: (result) => {
-      if (result.autoAccepted) {
-        toast.success("Already had a pending request — auto-accepted!");
+      if (result.autoAccepted || result.alreadyConnected) {
+        toast.success("Opening chat...");
         router.push(`/chat/${result.conversationId}`);
       } else {
         toast.success("Message request sent!");
@@ -138,7 +138,7 @@ export default function UserProfilePage({
             ) : (
               <MessageSquarePlus className="w-4 h-4" />
             )}
-            Send Message Request
+            Send Message / Connect
           </motion.button>
         </motion.div>
       </div>

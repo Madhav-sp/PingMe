@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
   });
   if (existingConvo) {
     return NextResponse.json(
-      { error: "You are already connected", conversationId: existingConvo.id },
-      { status: 409 }
+      { success: true, alreadyConnected: true, conversationId: existingConvo.id },
+      { status: 200 }
     );
   }
 

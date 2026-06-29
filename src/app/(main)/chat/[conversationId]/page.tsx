@@ -47,7 +47,7 @@ export default function ChatViewPage({
   const { data: session } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { emit, on, off } = useSocket();
+  const { emit, on, off, isConnected } = useSocket();
   const {
     selectedUser,
     replyingTo,
@@ -115,7 +115,7 @@ export default function ChatViewPage({
       pages: data.pages,
       pageParams: data.pageParams,
     }),
-    refetchInterval: 2500,
+    refetchInterval: isConnected ? false : 3000,
   });
 
   // Serverless polling for typing indicators
@@ -203,9 +203,20 @@ export default function ChatViewPage({
             if (!old || !old.pages || old.pages.length === 0) return old;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const exists = old.pages.some((page: any) =>
-              page.data.some((m: Message) => m.id === message.id)
+              page.data.some((m: Message) => m.id === message.id || (m.tempId && m.isPending && m.content === message.content))
             );
-            if (exists) return old;
+            if (exists) {
+              return {
+                ...old,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                pages: old.pages.map((page: any) => ({
+                  ...page,
+                  data: page.data.map((m: Message) =>
+                    m.id === message.id || (m.tempId && m.isPending && m.content === message.content) ? { ...message, isPending: false } : m
+                  ),
+                })),
+              };
+            }
 
             const firstPage = old.pages[0];
             return {
@@ -392,6 +403,26 @@ export default function ChatViewPage({
               });
               if (res.ok) {
                 const { message } = await res.json();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                queryClient.setQueryData(["messages", conversationId], (old: any) => {
+                  if (!old || !old.pages || old.pages.length === 0) return old;
+                  let replaced = false;
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const newPages = old.pages.map((page: any) => ({
+                    ...page,
+                    data: page.data.map((m: Message) => {
+                      if (m.id === tempId || m.id === message.id) {
+                        replaced = true;
+                        return { ...message, isPending: false };
+                      }
+                      return m;
+                    }),
+                  }));
+                  if (!replaced) {
+                    newPages[0] = { ...newPages[0], data: [...newPages[0].data, { ...message, isPending: false }] };
+                  }
+                  return { ...old, pages: newPages };
+                });
                 emit("sendMessage", { ...message, conversationId });
                 queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
               }
@@ -491,22 +522,27 @@ export default function ChatViewPage({
 
       const { message } = await res.json();
 
-      // Replace optimistic with real message
-      queryClient.setQueryData(
-        ["messages", conversationId],
-        (old: typeof data) => {
-          if (!old) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              data: page.data.map((m: Message) =>
-                m.tempId === tempId ? { ...message, isPending: false } : m
-              ),
-            })),
-          };
+      // Replace optimistic with real message or append if wiped by refetch
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      queryClient.setQueryData(["messages", conversationId], (old: any) => {
+        if (!old || !old.pages || old.pages.length === 0) return old;
+        let replaced = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const newPages = old.pages.map((page: any) => ({
+          ...page,
+          data: page.data.map((m: Message) => {
+            if (m.tempId === tempId || m.id === message.id) {
+              replaced = true;
+              return { ...message, isPending: false };
+            }
+            return m;
+          }),
+        }));
+        if (!replaced) {
+          newPages[0] = { ...newPages[0], data: [...newPages[0].data, { ...message, isPending: false }] };
         }
-      );
+        return { ...old, pages: newPages };
+      });
 
       // Emit via socket for real-time delivery
       emit("sendMessage", {
@@ -514,8 +550,9 @@ export default function ChatViewPage({
         conversationId,
       });
 
-      // Refetch conversations for sidebar update
+      // Refetch conversations & messages for seamless sync
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
     } catch {
       // Remove optimistic message on failure
       queryClient.setQueryData(
@@ -583,19 +620,30 @@ export default function ChatViewPage({
       if (!res.ok) throw new Error("Failed to send media");
       const { message } = await res.json();
 
-      queryClient.setQueryData(["messages", conversationId], (old: typeof data) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            data: page.data.map((m: Message) => (m.tempId === tempId ? { ...message, isPending: false } : m)),
-          })),
-        };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      queryClient.setQueryData(["messages", conversationId], (old: any) => {
+        if (!old || !old.pages || old.pages.length === 0) return old;
+        let replaced = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const newPages = old.pages.map((page: any) => ({
+          ...page,
+          data: page.data.map((m: Message) => {
+            if (m.tempId === tempId || m.id === message.id) {
+              replaced = true;
+              return { ...message, isPending: false };
+            }
+            return m;
+          }),
+        }));
+        if (!replaced) {
+          newPages[0] = { ...newPages[0], data: [...newPages[0].data, { ...message, isPending: false }] };
+        }
+        return { ...old, pages: newPages };
       });
 
       emit("sendMessage", { ...message, conversationId });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
     } catch {
       queryClient.setQueryData(["messages", conversationId], (old: typeof data) => {
         if (!old) return old;
