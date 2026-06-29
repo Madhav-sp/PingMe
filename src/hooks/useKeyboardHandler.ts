@@ -5,17 +5,17 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 /**
  * useKeyboardHandler
  * 
- * Controls the chat container height using window.visualViewport.height.
+ * Accurately tracks visual viewport height and offsetTop using window.visualViewport.
+ * When the keyboard opens on iOS/Android, the browser may resize the visual viewport
+ * and scroll the layout viewport (changing offsetTop).
  * 
- * Strategy:
- * - Returns `viewportHeight` which is always `visualViewport.height`
- * - The chat container sets its height to this value directly
- * - When the keyboard opens, visualViewport.height shrinks → container shrinks
- * - The flex layout (header + messages + composer) naturally adjusts
- * - No padding tricks, no double-adjustment, no gaps
+ * By returning both `viewportHeight` and `offsetTop`, the application container
+ * can position itself exactly over the visible screen area, ensuring the Header
+ * never moves and the Composer stays attached directly above the keyboard.
  */
 export function useKeyboardHandler() {
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [offsetTop, setOffsetTop] = useState<number>(0);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const maxKnownHeight = useRef<number>(0);
   const rafId = useRef<number>(0);
@@ -28,7 +28,10 @@ export function useKeyboardHandler() {
       if (!vv) return;
 
       const h = Math.round(vv.height);
+      const top = Math.round(vv.offsetTop);
+
       setViewportHeight(h);
+      setOffsetTop(top);
 
       if (h > maxKnownHeight.current) {
         maxKnownHeight.current = h;
@@ -51,10 +54,15 @@ export function useKeyboardHandler() {
     }
 
     maxKnownHeight.current = Math.round(vv.height);
-    setTimeout(() => setViewportHeight(maxKnownHeight.current), 0);
+    setTimeout(() => {
+      setViewportHeight(Math.round(vv.height));
+      setOffsetTop(Math.round(vv.offsetTop));
+    }, 0);
 
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update);
 
     const onOrientation = () => {
       setTimeout(() => {
@@ -69,10 +77,12 @@ export function useKeyboardHandler() {
     return () => {
       vv.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update);
       window.removeEventListener('orientationchange', onOrientation);
       if (rafId.current) cancelAnimationFrame(rafId.current);
     };
   }, [update]);
 
-  return { viewportHeight, isKeyboardOpen };
+  return { viewportHeight, offsetTop, isKeyboardOpen };
 }

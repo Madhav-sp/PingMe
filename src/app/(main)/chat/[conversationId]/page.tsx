@@ -67,7 +67,7 @@ export default function ChatViewPage({
   } = useChatStore();
   const { startCall } = useCallStore();
   const { saveDraft, getDraft } = useSessionRestore();
-  const { viewportHeight, isKeyboardOpen } = useKeyboardHandler();
+  const { viewportHeight, offsetTop, isKeyboardOpen } = useKeyboardHandler();
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const isInitialMountRef = useRef(true);
 
@@ -336,14 +336,14 @@ export default function ChatViewPage({
     }
   }, [allMessages.length, showScrollButton]);
 
-  // When keyboard opens, scroll to keep newest messages visible
+  // When keyboard opens or resizes, keep newest message visible if user was at bottom
   useEffect(() => {
-    if (isKeyboardOpen && messagesContainerRef.current) {
+    if (isKeyboardOpen && !showScrollButton && messagesContainerRef.current) {
       requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
       });
     }
-  }, [isKeyboardOpen, viewportHeight]);
+  }, [isKeyboardOpen, viewportHeight, showScrollButton]);
 
   // Scroll detection
   const handleScroll = () => {
@@ -861,13 +861,17 @@ export default function ChatViewPage({
     setIsViewerOpen(true);
   };
 
-  // Container height: use visualViewport.height when available, else 100%
+  // Container height & position: align exactly to visual viewport
   const containerStyle = useMemo(() => {
     if (viewportHeight !== null) {
-      return { height: `${viewportHeight}px` };
+      return {
+        height: `${viewportHeight}px`,
+        transform: `translate3d(0, ${offsetTop}px, 0)`,
+        width: '100%',
+      };
     }
-    return { height: '100%' };
-  }, [viewportHeight]);
+    return { height: '100%', width: '100%' };
+  }, [viewportHeight, offsetTop]);
 
   return (
     <div ref={chatContainerRef} className="chat-layout flex-1 bg-background" style={containerStyle}>

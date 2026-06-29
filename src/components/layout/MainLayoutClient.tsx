@@ -25,7 +25,7 @@ export function MainLayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <SocketProvider>
-      <div className="h-dvh w-full flex overflow-hidden bg-background">
+      <div className="fixed inset-0 h-dvh w-full flex overflow-hidden bg-background">
         <CallModal />
         {/* Sidebar */}
         <AnimatePresence mode="wait">
@@ -59,7 +59,7 @@ export function MainLayoutClient({ children }: { children: React.ReactNode }) {
         </AnimatePresence>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
           {children}
         </div>
       </div>
