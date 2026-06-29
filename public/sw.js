@@ -128,33 +128,45 @@ self.addEventListener('message', (event) => {
 self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
-    const data = event.data.json();
-    const title = data.title || 'PingMe';
+    const payload = event.data.json();
+    const title = payload.title || 'PingMe';
     const options = {
-      body: data.body || 'You have a new message',
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/monochrome-icon-512x512.png',
-      data: data.url ? { url: data.url } : {},
+      body: payload.body || 'New notification',
+      icon: payload.icon || '/icons/icon-192x192.png',
+      badge: payload.badge || '/icons/monochrome-icon-512x512.png',
+      image: payload.image || undefined,
+      tag: payload.tag || 'pingme-notification',
+      data: payload.data || { url: payload.url || '/chat' },
       vibrate: [100, 50, 100],
     };
     event.waitUntil(self.registration.showNotification(title, options));
   } catch {
-    // Non-json push
+    // Non-JSON fallback
   }
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const urlToOpen = event.notification.data?.url || '/chat';
+  const rawUrl = event.notification.data?.url || '/chat';
+  const targetUrl = new URL(rawUrl, self.location.origin).href;
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // First try to focus an existing window already on the target URL
       for (const client of windowClients) {
-        if (client.url.includes(urlToOpen) && 'focus' in client) {
+        if (client.url === targetUrl && 'focus' in client) {
           return client.focus();
         }
       }
+      // Next try to find any open app window, focus it, and navigate to the target conversation
+      for (const client of windowClients) {
+        if ('focus' in client && 'navigate' in client) {
+          return client.focus().then(() => client.navigate(targetUrl));
+        }
+      }
+      // Otherwise open a brand new window directly to the target URL
       if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
+        return clients.openWindow(targetUrl);
       }
     })
   );

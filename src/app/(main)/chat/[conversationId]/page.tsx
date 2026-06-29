@@ -383,61 +383,77 @@ export default function ChatViewPage({
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const mime = mediaRecorder.mimeType || supportedType || "audio/webm";
         const audioBlob = new Blob(audioChunksRef.current, { type: mime });
         stream.getTracks().forEach((track) => track.stop());
 
         if (audioChunksRef.current.length === 0) return;
 
-        const reader = new FileReader();
-        reader.readAsDataURL(audioBlob);
-        reader.onloadend = async () => {
-          const base64Audio = reader.result as string;
-          if (base64Audio) {
-            const tempId = `temp-voice-${Date.now()}`;
-            const voiceMsg: Message = {
-              id: tempId,
-              tempId,
-              conversationId,
-              senderId: currentUserId,
-              receiverId: selectedUser?.id || "",
+        const tempId = `temp-voice-${Date.now()}`;
+        const localPreviewUrl = URL.createObjectURL(audioBlob);
+        const fileName = `voice-${Date.now()}.webm`;
+
+        const voiceMsg: Message = {
+          id: tempId,
+          tempId,
+          conversationId,
+          senderId: currentUserId,
+          receiverId: selectedUser?.id || "",
+          content: "🎤 Voice message",
+          type: "AUDIO",
+          fileUrl: localPreviewUrl,
+          fileName,
+          status: "SENT",
+          isEdited: false,
+          deletedForAll: false,
+          reactions: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isPending: true,
+        };
+
+        // Optimistic insert into first page
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        queryClient.setQueryData(["messages", conversationId], (old: any) => {
+          if (!old || !old.pages || old.pages.length === 0) return old;
+          const firstPage = old.pages[0];
+          return {
+            ...old,
+            pages: [{ ...firstPage, data: [...firstPage.data, voiceMsg] }, ...old.pages.slice(1)],
+          };
+        });
+
+        try {
+          // Step 1: Upload audio blob to Cloudinary via /api/upload
+          const formData = new FormData();
+          formData.append("file", audioBlob, fileName);
+
+          const uploadRes = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!uploadRes.ok) {
+            const errData = await uploadRes.json().catch(() => ({}));
+            throw new Error(errData.error || `Upload failed (${uploadRes.status})`);
+          }
+
+          const uploadData = await uploadRes.json();
+
+          // Step 2: Send message with secure Cloudinary URL
+          const res = await fetch("/api/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
               content: "🎤 Voice message",
+              conversationId,
               type: "AUDIO",
-              fileUrl: base64Audio,
-              fileName: `voice-${Date.now()}.webm`,
-              status: "SENT",
-              isEdited: false,
-              deletedForAll: false,
-              reactions: [],
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              isPending: true,
-            };
-
-            // Optimistic insert into first page
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            queryClient.setQueryData(["messages", conversationId], (old: any) => {
-              if (!old || !old.pages || old.pages.length === 0) return old;
-              const firstPage = old.pages[0];
-              return {
-                ...old,
-                pages: [{ ...firstPage, data: [...firstPage.data, voiceMsg] }, ...old.pages.slice(1)],
-              };
-            });
-
-            try {
-              const res = await fetch("/api/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  content: "🎤 Voice message",
-                  conversationId,
-                  type: "AUDIO",
-                  fileUrl: base64Audio,
-                  fileName: "voice.webm",
-                }),
-              });
+              fileUrl: uploadData.url,
+              fileName: uploadData.fileName || fileName,
+              fileSize: uploadData.fileSize || audioBlob.size,
+            }),
+          });
               if (res.ok) {
                 const { message } = await res.json();
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -464,10 +480,8 @@ export default function ChatViewPage({
                 queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
               }
             } catch {
-              toast.error("Failed to send voice message");
+              toast.error("Failed to upload/send voice message");
             }
-          }
-        };
       };
 
       mediaRecorder.start();

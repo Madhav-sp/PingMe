@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { encrypt } from "@/lib/encryption";
+import { sendPushNotificationToUser } from "@/lib/webPush";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -129,6 +130,24 @@ export async function POST(req: NextRequest) {
     where: { conversationId, userId: otherParticipant.userId },
     data: updateParticipantData,
   });
+
+  // Trigger background Web Push delivery asynchronously without blocking response
+  let pushBody = content;
+  if (type === "IMAGE") pushBody = "📷 Photo";
+  else if (type === "VIDEO") pushBody = "📹 Video";
+  else if (type === "AUDIO") pushBody = "🎤 Voice message";
+  else if (type === "FILE") pushBody = `📎 ${fileName || "Attachment"}`;
+
+  sendPushNotificationToUser(otherParticipant.userId, {
+    title: message.sender.displayName || message.sender.username || "New message",
+    body: pushBody,
+    icon: message.sender.image || "/icons/icon-192x192.png",
+    url: `/chat/${conversationId}`,
+    conversationId,
+    messageId: message.id,
+    senderName: message.sender.displayName || message.sender.username,
+    senderAvatar: message.sender.image || undefined,
+  }).catch((err) => console.error("[Messages API] Background push failed:", err));
 
   // Return decrypted message to client
   return NextResponse.json({

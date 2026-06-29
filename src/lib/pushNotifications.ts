@@ -5,12 +5,23 @@
  * 
  * This module handles:
  * - Requesting notification permission
- * - Subscribing to push notifications via the Push API
- * - Saving/refreshing subscriptions
- * - Checking support across browsers
+ * - Subscribing to push notifications via the Push API with VAPID key validation
+ * - Syncing subscriptions with /api/push/subscribe endpoint
+ * - Checking support across browsers and PWAs
  */
 
 const SUBSCRIPTION_KEY = 'pingme_push_sub';
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 /** Check if push notifications are supported */
 export function isPushSupported(): boolean {
@@ -38,19 +49,33 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   if (Notification.permission === 'granted') return 'granted';
   if (Notification.permission === 'denied') return 'denied';
 
-  return Notification.requestPermission();
+  const perm = await Notification.requestPermission();
+  console.log(`[Push Client] Permission requested: ${perm}`);
+  return perm;
 }
 
 /** 
- * Subscribe to push notifications.
+ * Subscribe to push notifications and register with server.
  * Returns the PushSubscription or null if failed.
  */
 export async function subscribeToPush(): Promise<PushSubscription | null> {
-  if (!isPushSupported()) return null;
+  if (!isPushSupported()) {
+    console.warn("[Push Client] Push notifications not supported by this browser.");
+    return null;
+  }
 
   try {
     const permission = await requestNotificationPermission();
-    if (permission !== 'granted') return null;
+    if (permission !== 'granted') {
+      console.warn("[Push Client] Notification permission denied.");
+      return null;
+    }
+
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim().replace(/^["']|["']$/g, "");
+    if (!vapidKey) {
+      console.error("[Push Client] CRITICAL: NEXT_PUBLIC_VAPID_PUBLIC_KEY is missing from environment variables.");
+      return null;
+    }
 
     const registration = await navigator.serviceWorker.ready;
 
@@ -58,26 +83,46 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
     let subscription = await registration.pushManager.getSubscription();
     
     if (!subscription) {
-      // Create a new subscription
-      // Using a VAPID public key placeholder — in production, replace with your real key
-      // For local notifications (no server push), we can still use the Notification API directly
+      console.log("[Push Client] Generating new Web Push subscription...");
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        // In production, set applicationServerKey to your VAPID public key
-        // applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      }).catch(() => null);
+        applicationServerKey: urlBase64ToUint8Array(vapidKey) as unknown as BufferSource,
+      }).catch((err) => {
+        console.error("[Push Client] pushManager.subscribe failure:", err);
+        return null;
+      });
     }
 
     if (subscription) {
-      // Persist the subscription state
-      localStorage.setItem(SUBSCRIPTION_KEY, JSON.stringify({
-        subscribed: true,
-        timestamp: Date.now(),
-      }));
+      console.log("[Push Client] Syncing subscription with server endpoint...");
+      const subJson = subscription.toJSON();
+      
+      const res = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: subJson.endpoint,
+          keys: subJson.keys,
+        }),
+      }).catch((err) => {
+        console.error("[Push Client] Network error syncing subscription:", err);
+        return null;
+      });
+
+      if (res && res.ok) {
+        console.log("[Push Client] Server confirmed push subscription storage.");
+        localStorage.setItem(SUBSCRIPTION_KEY, JSON.stringify({
+          subscribed: true,
+          timestamp: Date.now(),
+        }));
+      } else {
+        console.error("[Push Client] Server rejected subscription registration:", res?.status);
+      }
     }
 
     return subscription;
-  } catch {
+  } catch (error) {
+    console.error("[Push Client] Unexpected error in subscribeToPush:", error);
     return null;
   }
 }
@@ -99,7 +144,6 @@ export async function showLocalNotification(
       ...options,
     } as NotificationOptions);
   } catch {
-    // Fallback to basic Notification API
     try {
       new Notification(title, {
         icon: '/icons/icon-192x192.png',
@@ -129,8 +173,17 @@ export async function unsubscribeFromPush(): Promise<boolean> {
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.getSubscription();
     if (subscription) {
+      const endpoint = subscription.endpoint;
       await subscription.unsubscribe();
       localStorage.removeItem(SUBSCRIPTION_KEY);
+
+      console.log("[Push Client] Removing endpoint from server...");
+      await fetch('/api/push/subscribe', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint }),
+      }).catch(() => null);
+
       return true;
     }
     return false;
